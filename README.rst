@@ -13,61 +13,32 @@
 .. limitations under the License.
 ..
 
-zhmcclient - A pure Python client library for the IBM Z HMC Web Services API
-============================================================================
+zhmc_qradar - QRadar support for the IBM Z HMC, written in pure Python
+======================================================================
 
-.. PyPI download statistics are broken, but the new PyPI warehouse makes PyPI
-.. download statistics available through Google BigQuery
-.. (https://bigquery.cloud.google.com).
-.. Query to list package downloads by version:
-..
-   SELECT
-     file.project,
-     file.version,
-     COUNT(*) as total_downloads,
-     SUM(CASE WHEN REGEXP_EXTRACT(details.python, r"^([^\.]+\.[^\.]+)") = "2.6" THEN 1 ELSE 0 END) as py26_downloads,
-     SUM(CASE WHEN REGEXP_EXTRACT(details.python, r"^([^\.]+\.[^\.]+)") = "2.7" THEN 1 ELSE 0 END) as py27_downloads,
-     SUM(CASE WHEN REGEXP_EXTRACT(details.python, r"^([^\.]+)\.[^\.]+") = "3" THEN 1 ELSE 0 END) as py3_downloads,
-   FROM
-     TABLE_DATE_RANGE(
-       [the-psf:pypi.downloads],
-       TIMESTAMP("19700101"),
-       CURRENT_TIMESTAMP()
-     )
-   WHERE
-     file.project = 'zhmcclient'
-   GROUP BY
-     file.project, file.version
-   ORDER BY
-     file.version DESC
-
-.. image:: https://img.shields.io/pypi/v/zhmcclient.svg
-    :target: https://pypi.python.org/pypi/zhmcclient/
+.. image:: https://img.shields.io/pypi/v/zhmc_qradar.svg
+    :target: https://pypi.python.org/pypi/zhmc_qradar/
     :alt: Version on Pypi
 
-.. # .. image:: https://img.shields.io/pypi/dm/zhmcclient.svg
-.. #     :target: https://pypi.python.org/pypi/zhmcclient/
-.. #     :alt: Pypi downloads
+.. .. image:: https://travis-ci.org/zhmcclient/zhmc-qradar.svg?branch=master
+..     :target: https://travis-ci.org/zhmcclient/zhmc-qradar
+..     :alt: Travis test status (master)
 
-.. image:: https://travis-ci.org/zhmcclient/python-zhmcclient.svg?branch=master
-    :target: https://travis-ci.org/zhmcclient/python-zhmcclient
-    :alt: Travis test status (master)
+.. .. image:: https://ci.appveyor.com/api/projects/status/i022iaeu3dao8j5x/branch/master?svg=true
+..     :target: https://ci.appveyor.com/project/leopoldjuergen/zhmc-qradar
+..     :alt: Appveyor test status (master)
 
-.. image:: https://ci.appveyor.com/api/projects/status/i022iaeu3dao8j5x/branch/master?svg=true
-    :target: https://ci.appveyor.com/project/leopoldjuergen/python-zhmcclient
-    :alt: Appveyor test status (master)
+.. .. image:: https://readthedocs.org/projects/zhmc-qradar/badge/?version=latest
+..     :target: http://zhmc-qradar.readthedocs.io/en/latest/
+..     :alt: Docs build status (latest)
 
-.. image:: https://readthedocs.org/projects/python-zhmcclient/badge/?version=latest
-    :target: http://python-zhmcclient.readthedocs.io/en/latest/
-    :alt: Docs build status (latest)
+.. .. image:: https://img.shields.io/coveralls/zhmcclient/zhmc-qradar.svg
+..     :target: https://coveralls.io/r/zhmcclient/zhmc-qradar
+..     :alt: Test coverage (master)
 
-.. image:: https://img.shields.io/coveralls/zhmcclient/python-zhmcclient.svg
-    :target: https://coveralls.io/r/zhmcclient/python-zhmcclient
-    :alt: Test coverage (master)
-
-.. image:: https://codeclimate.com/github/zhmcclient/python-zhmcclient/badges/gpa.svg
-    :target: https://codeclimate.com/github/zhmcclient/python-zhmcclient
-    :alt: Code Climate
+.. .. image:: https://codeclimate.com/github/zhmcclient/zhmc-qradar/badges/gpa.svg
+..     :target: https://codeclimate.com/github/zhmcclient/zhmc-qradar
+..     :alt: Code Climate
 
 .. contents:: Contents:
    :local:
@@ -75,30 +46,12 @@ zhmcclient - A pure Python client library for the IBM Z HMC Web Services API
 Overview
 ========
 
-The zhmcclient package is a client library
-written in pure Python that interacts with the Web Services API of the Hardware
-Management Console (HMC) of `IBM Z`_ or `LinuxONE`_ machines. The goal of
-this package is to make the HMC Web Services API easily consumable for Python
-programmers.
+The zhmc_qradar package provides QRadar support for the IBM Z HMC, written in
+pure Python.
 
-.. _IBM Z: http://www.ibm.com/systems/z/
-.. _LinuxONE: http://www.ibm.com/systems/linuxone/
-
-The HMC Web Services API is the access point for any external tools to
-manage the IBM Z  or LinuxONE platform. It supports management of the
-lifecycle and configuration of various platform resources, such as partitions,
-CPU, memory, virtual switches, I/O adapters, and more.
-
-The zhmcclient package encapsulates both protocols supported by the HMC Web
-Services API:
-
-* REST over HTTPS for request/response-style operations driven by the client.
-  Most of these operations complete synchronously, but some long-running tasks
-  complete asynchronously.
-
-* JMS (Java Messaging Services) for notifications from the HMC to the client.
-  This can be used to be notified about changes in the system, or about
-  completion of asynchronous tasks started using REST.
+It provides a zhmc_qradar program that runs as a kind of bridge between the
+HMC and a QRadar services, and forwards the Security Log and the Audit Log
+of the HMC to the QRadar service.
 
 Installation
 ============
@@ -107,69 +60,36 @@ The quick way:
 
 .. code-block:: bash
 
-    $ pip install zhmcclient
+    $ pip install zhmc_qradar
 
-For more details, see the `Installation section`_ in the documentation.
+.. For more details, see the `Installation section`_ in the documentation.
 
-.. _Installation section: http://python-zhmcclient.readthedocs.io/en/stable/intro.html#installation
+.. _Installation section: http://zhmc-qradar.readthedocs.io/en/stable/intro.html#installation
 
 Quickstart
 ===========
 
-The following example code lists the machines (CPCs) managed by an HMC:
+1. Create a zhmc_qradar config file, that specifies the targeted HMC and desired
+   destination for the logs.
 
-.. code-block:: python
+   **TBD: Provide an example config file.**
 
-    #!/usr/bin/env python
-
-    import zhmcclient
-    import requests.packages.urllib3
-    requests.packages.urllib3.disable_warnings()
-
-    # Set these variables for your environment:
-    hmc_host = "<IP address or hostname of the HMC>"
-    hmc_userid = "<userid on that HMC>"
-    hmc_password = "<password of that HMC userid>"
-
-    session = zhmcclient.Session(hmc_host, hmc_userid, hmc_password)
-    client = zhmcclient.Client(session)
-
-    cpcs = client.cpcs.list()
-    for cpc in cpcs:
-        print(cpc)
-
-Possible output when running the script:
+2. Start the script as a job (it runs forever):
 
 .. code-block:: text
 
-    Cpc(name=P000S67B, object-uri=/api/cpcs/fa1f2466-12df-311a-804c-4ed2cc1d6564, status=service-required)
+    zhmc_qradar -c config_file
 
 Documentation
 =============
 
-The zhmcclient documentation is on RTD:
+The zhmc_qradar documentation is on RTD:
 
 * `Documentation for latest version on Pypi`_
 * `Documentation for master branch in Git repo`_
 
-.. _Documentation for latest version on Pypi: http://python-zhmcclient.readthedocs.io/en/stable/
-.. _Documentation for master branch in Git repo: http://python-zhmcclient.readthedocs.io/en/latest/
-
-zhmc CLI
-========
-
-Before version 0.18.0 of the zhmcclient package, it contained the zhmc CLI.
-Starting with zhmcclient version 0.18.0, the zhmc CLI has been moved from this
-project into the new `zhmccli project`_.
-
-If your project uses the zhmc CLI, and you are upgrading the zhmcclient
-package from before 0.18.0 to 0.18.0 or later, your project will need to add
-the `zhmccli package`_ to its dependencies.
-
-.. _zhmccli project: https://github.com/zhmcclient/zhmccli
-
-.. _zhmccli package: https://pypi.python.org/pypi/zhmccli
-
+.. _Documentation for latest version on Pypi: http://zhmc-qradar.readthedocs.io/en/stable/
+.. _Documentation for master branch in Git repo: http://zhmc-qradar.readthedocs.io/en/latest/
 
 Contributing
 ============
@@ -177,11 +97,11 @@ Contributing
 For information on how to contribute to this project, see the
 `Development section`_ in the documentation.
 
-.. _Development section: http://python-zhmcclient.readthedocs.io/en/stable/development.html
+.. _Development section: http://zhmc-qradar.readthedocs.io/en/stable/development.html
 
 License
 =======
 
-The zhmcclient package is licensed under the `Apache 2.0 License`_.
+The zhmc_qradar package is licensed under the `Apache 2.0 License`_.
 
-.. _Apache 2.0 License: https://github.com/zhmcclient/python-zhmcclient/tree/master/LICENSE
+.. _Apache 2.0 License: https://github.com/zhmcclient/zhmc-qradar/tree/master/LICENSE
