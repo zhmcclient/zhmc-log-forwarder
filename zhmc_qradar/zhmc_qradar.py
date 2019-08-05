@@ -21,6 +21,7 @@ import sys
 import logging
 import argparse
 import yaml
+import warnings
 import requests.packages.urllib3
 from datetime import datetime
 from dateutil import parser
@@ -236,27 +237,62 @@ def main():
         out_handler.output_entries(log_entries)
 
         if args.future:
-            # TODO: Create topic for log entries. It seems that the zhmcclient
-            # does not provide functionality for that, yet.
-            topic = 'dummy'
-            receiver = zhmcclient.NotificationReceiver(
-                topic, hmc, userid, password)
-            try:
-                for headers, message in receiver.notifications():
-                    # TODO: Process notification
-                    print("Debug: notification:\n"
-                          "  headers={!r}\n"
-                          "  message={!r}".format(headers, message))
+
+            topic_items = session.get_notification_topics()
+            security_topic_name = None
+            audit_topic_name = None
+            topic_names = list()
+            for topic_item in topic_items:
+                topic_type = topic_item['topic-type']
+                if topic_type == 'security-notification' and 'security' in logs:
+                    security_topic_name = topic_item['topic-name']
+                    topic_names.append(security_topic_name)
+                if topic_type == 'audit-notification' and 'audit' in logs:
+                    audit_topic_name = topic_item['topic-name']
+                    topic_names.append(audit_topic_name)
+
+            if topic_names:
+
+                # TODO: zhmcclient: Add support for list of topic names
+                receiver = zhmcclient.NotificationReceiver(
+                    topic_names[0], hmc, userid, password)
+
+                try:
+                    while True:
+                        for headers, message in receiver.notifications():
+                            if headers['notification-type'] == 'log-entry':
+                                topic_name = headers['destination']. \
+                                    split('/')[-1]
+                                if topic_name == security_topic_name:
+                                    log_entries = message['log-entries']
+                                    for le in log_entries:
+                                        le['log-type'] = 'Security'
+                                    out_handler.output_entries(log_entries)
+                                elif topic_name == audit_topic_name:
+                                    log_entries = message['log-entries']
+                                    for le in log_entries:
+                                        le['log-type'] = 'Audit'
+                                    out_handler.output_entries(log_entries)
+                                else:
+                                    warnings.warn(
+                                        "Ignoring invalid topic name: {}".
+                                        format(topic_name),
+                                        RuntimeWarning)
+                            else:
+                                warnings.warn(
+                                    "Ignoring invalid notification type: {}".
+                                    format(headers['notification-type']),
+                                    RuntimeWarning)
+                        warnings.warn(
+                            "Notification receiver disconnected - reopening",
+                            RuntimeWarning)
+                except KeyboardInterrupt:
+                    print("Keyboard interrupt - leaving receiver loop")
                     sys.stdout.flush()
-                log_entries = []
-                # TODO: Get log entries since last time
-                out_handler.output_entries(log_entries)
-            except KeyboardInterrupt:
-                print("Keyboard interrupt - leaving receiver loop")
-                sys.stdout.flush()
-            finally:
-                print("Closing receiver...")
-                sys.stdout.flush()
+                finally:
+                    print("Closing receiver...")
+                    sys.stdout.flush()
+
                 receiver.close()
 
         out_handler.output_end()
