@@ -20,12 +20,14 @@ QRadar support for the IBM Z HMC, written in pure Python
 import sys
 import logging
 import argparse
-import yaml
 import warnings
-import requests.packages.urllib3
 from datetime import datetime
+
+import yaml
+import requests.packages.urllib3
 from dateutil import parser
 from dateutil.tz import tzlocal
+
 import zhmcclient
 
 
@@ -221,7 +223,8 @@ def main():
         print("Include log entries since:       {}".
               format(since_str))
         print("Wait for future log entries:     {}".
-              format('yes' if args.future else 'no'))
+              format('yes (use keyboard interrupt to stop, e.g. Ctrl-C)'
+                     if args.future else 'no'))
         print("")
         sys.stdout.flush()
 
@@ -253,9 +256,8 @@ def main():
 
             if topic_names:
 
-                # TODO: zhmcclient: Add support for list of topic names
                 receiver = zhmcclient.NotificationReceiver(
-                    topic_names[0], hmc, userid, password)
+                    topic_names, hmc, userid, password)
 
                 try:
                     while True:
@@ -287,7 +289,7 @@ def main():
                             "Notification receiver disconnected - reopening",
                             RuntimeWarning)
                 except KeyboardInterrupt:
-                    print("Keyboard interrupt - leaving receiver loop")
+                    print("\nKeyboard interrupt - leaving receiver loop")
                     sys.stdout.flush()
                 finally:
                     print("Closing receiver...")
