@@ -18,52 +18,269 @@ QRadar support for the IBM Z HMC, written in pure Python
 """
 
 import sys
-import logging
 import argparse
 import warnings
 from datetime import datetime
+from collections import OrderedDict
+import textwrap
 
+import attr
+import pbr
 import yaml
 import requests.packages.urllib3
-from dateutil import parser
-from dateutil.tz import tzlocal
+from dateutil import parser, tz
 
 import zhmcclient
 
+__version__ = pbr.version.VersionInfo('zhmc-qradar').release_string()
+
+try:
+    textwrap.indent
+except AttributeError:  # undefined function (wasn't added until Python 3.3)
+    def indent(text, amount, pad_char=' '):
+        pad_str = amount * pad_char
+        return ''.join(pad_str + line for line in text.splitlines(True))
+else:
+    def indent(text, amount, pad_char=' '):
+        return textwrap.indent(text, amount * pad_char)
+
 
 class Error(Exception):
+    """
+    Abstract base class for any errors raised by this script.
+    """
     pass
 
 
 class UserError(Error):
+    """
+    Error indicating that the user of the script made an error.
+    """
     pass
 
 
-def load_config(filepath):
+@attr.attrs
+class ConfigParm(object):
     """
-    Load the zhmc_qradar config file and return a dict with config parms.
+    Definition of a single config parameter for this script.
+
+    They may be specified in a config file and overridden using command line
+    options. This definition represents the resulting effective configuration,
+    i.e. "required" means the parameter is required to be defined in the config
+    file or in the command line (or both).
     """
-    try:
-        with open(filepath, 'r') as fp:
-            config = yaml.safe_load(fp)
-    except IOError as exc:
-        raise UserError(
-            "Cannot load zhmc_qradar config file {}: {}".
-            format(filepath, exc))
-    return config
+    type = attr.attrib(type=str)  # type in text form for including in help
+    desc = attr.attrib(type=str)  # description text for help
+    allowed = attr.attrib(type=list, default=None)  # list of allowed values
+    required = attr.attrib(type=bool, default=False)  # required or optional
+    default = attr.attrib(type=str, default=None)  # default value if optional
+    example_yaml = attr.attrib(type=str, default=None)  # example for file
 
 
-def get_optional_config_parm(config, name, default=None):
-    return config.get(name, default)
+# Definition of all configuration parameters for this script.
+CONFIG_PARMS = OrderedDict()
+CONFIG_PARMS['hmc_host'] = ConfigParm(
+    type='string', example_yaml="'10.11.12.13'",
+    required=True,
+    desc="IP address or hostname of the HMC.")
+CONFIG_PARMS['hmc_user'] = ConfigParm(
+    type='string', example_yaml="myuser",
+    required=True,
+    desc="HMC userid.")
+CONFIG_PARMS['hmc_password'] = ConfigParm(
+    type='string', example_yaml="mypassword",
+    required=True,
+    desc="HMC password.")
+CONFIG_PARMS['dest'] = ConfigParm(
+    type='string', example_yaml="stdout",
+    allowed=['stdout'],
+    required=False, default='stdout',
+    desc="""
+Destination for the log entries:
+- 'stdout': Standard output.
+""")
+CONFIG_PARMS['logs'] = ConfigParm(
+    type='list/tuple of string', example_yaml="[security, audit]",
+    allowed=['security', 'audit'],
+    required=False, default=['security', 'audit'],
+    desc="""
+List of log types to include, with the following list item values:
+- 'security': HMC Security Log."
+- 'audit': HMC Audit Log.
+""")
+CONFIG_PARMS['since'] = ConfigParm(
+    type='string', example_yaml="now",
+    required=False, default='now',
+    desc="""
+Include past log entries since the specified date and time, or since a special
+date and time.
+Values are:
+- A date and time value suitable for dateutil.parser. Timezones are ignored
+  and the local timezone is assumed instead.
+- 'all': Include all available past log entries.
+- 'now': Include past log entries since now. This may actually include log
+  entries from recent past.
+""")
+CONFIG_PARMS['future'] = ConfigParm(
+    type='bool', example_yaml="false",
+    required=False, default=False,
+    desc="""
+Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
+program.
+""")
 
 
-def get_required_config_parm(config, name):
-    try:
-        return config[name]
-    except KeyValue:
-        raise UserError(
-            "Config file does not contain required parameter '{}'".
-            format(name))
+class Config(object):
+    """
+    The configuration for this script. It can be set from a config file and/or
+    from command line options.
+
+    The configuration parameters are attributes on an object of this class.
+    See CONFIG_PARMS for details.
+    """
+
+    def __init__(self):
+
+        # Config parameters: dict of name to value.
+        # Parameters not specified are omitted from the dict.
+        self.parms = dict()
+
+        # Set defaults of optional parameters
+        for name in CONFIG_PARMS:
+            parm = CONFIG_PARMS[name]
+            if not parm.required:
+                self.parms[name] = parm.default
+
+    def __repr__(self):
+        repr_str = "Config({})".format(self.parms)
+        return repr_str
+
+    def update_from_file(self, filepath):
+        """
+        Update the configuration from a config file in YAML.
+
+        The config file must have only the config parameters for this config
+        class. Additional parameters will cause UserError to be raised.
+        """
+        try:
+            with open(filepath, 'r') as fp:
+                config_dict = yaml.safe_load(fp)
+        except IOError as exc:
+            raise UserError(
+                "Cannot load config file {}: {}".
+                format(filepath, exc))
+        for name in config_dict:
+            value = config_dict[name]
+            if name not in CONFIG_PARMS:
+                raise UserError(
+                    "Config file {} contains an invalid config parameter: "
+                    "{} = {}".
+                    format(filepath, name, value))
+            else:
+                self.set_parm(name, value, 'config file')
+
+    def update_from_args(self, args):
+        """
+        Update the configuration from parsed command line arguments.
+
+        The args parameter must contain the config parameters as attributes.
+        It may contain additional attributes, only those attributes that
+        are config parameters are used.
+        """
+        for name in CONFIG_PARMS:
+            if hasattr(args, name):
+                value = getattr(args, name)
+                if value is not None:
+                    self.set_parm(name, value, 'command line')
+
+    def set_parm(self, name, value, source):
+        """
+        Set a config parameter to a value.
+
+        'source' is a human readable indicator for the source of the
+        config parameter.
+        """
+        parm = CONFIG_PARMS[name]
+        if parm.allowed is not None:
+            if parm.type.startswith('list'):
+                if not all(v in parm.allowed for v in value):
+                    raise UserError(
+                        "Config parameter '{}' from {} has an invalid "
+                        "value: {} (allowed is a list of any of: {}).".
+                        format(name, source, value, ', '.join(parm.allowed)))
+            else:
+                if value not in parm.allowed:
+                    raise UserError(
+                        "Config parameter '{}' from {} has an invalid "
+                        "value: {} (allowed values are: {}).".
+                        format(name, source, value, ', '.join(parm.allowed)))
+        self.parms[name] = value
+
+    def get_parm(self, name):
+        """
+        Return the value of a config parameter.
+
+        If it is required and not specified, a UserError is raised.
+        """
+        try:
+            value = self.parms[name]
+        except KeyError:
+            parm = CONFIG_PARMS[name]
+            if parm.required:
+                raise UserError(
+                    "Required config parameter '{}' was not specified "
+                    "(in config file or command line).".
+                    format(name))
+        return value
+
+
+class HelpConfigAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""
+The configuration consists of the following parameters. They can be specified
+in a config file and as optiona on the command line. Command line options
+override config file parameters.
+
+The statements below about whether a parameter is required or optional refer
+to the effective configuration after applying the config file and the command
+line options.""")
+        for name in CONFIG_PARMS:
+            parm = CONFIG_PARMS[name]
+            if parm.required:
+                required_str = \
+                    "Required."
+            else:
+                required_str = \
+                    "Optional, with default: {}". \
+                    format(parm.default)
+            desc_str = parm.desc.strip(' \n') + '\n' + required_str
+            desc_str = indent(desc_str, 2)
+            print("\n* {} ({}):\n{}".
+                  format(name, parm.type, desc_str))
+        print("")
+        sys.exit(2)
+
+
+class HelpConfigFileAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""
+The config file is in YAML format and contains zero or more of the
+config parameters explained in the --help-config option.
+
+Here is an example config file:
+
+---
+# Example zhmc_qradar config file""")
+        for name in CONFIG_PARMS:
+            parm = CONFIG_PARMS[name]
+            desc_str = parm.desc.strip(' \n')
+            desc_str = indent(desc_str, 1, '# ')
+            print("\n{}\n{}: {}".
+                  format(desc_str, name, parm.example_yaml, desc_str))
+        print("")
+        sys.exit(2)
 
 
 def parse_args():
@@ -74,35 +291,98 @@ def parse_args():
     Returns:
         argparse.Namespace: Dictionary with parsing results.
     """
-    default_config_file = '~/.zhmc_qradar.config.yml'
     parser = argparse.ArgumentParser(
-        description="QRadar support for the IBM Z HMC, written in pure Python")
-    parser.add_argument(
-        "-c", "--config-file", metavar="CONFIGFILE",
+        add_help=False,
+        description="Collector for security and audit logs from an IBM Z HMC. "
+        "The log entries can be selected based on log type and time range, "
+        "and will be sent to a destination such as stdout or a QRadar "
+        "service.",
+        usage="zhmc_qradar [options]",
+        epilog="")
+
+    general_opts = parser.add_argument_group('General options')
+    general_opts.add_argument(
+        '-h', '--help',
+        action='help', default=argparse.SUPPRESS,
+        help="Show this help message and exit.")
+    general_opts.add_argument(
+        '--help-config',
+        action=HelpConfigAction, nargs=0,
+        help="Show a help message about the config parameters and exit.")
+    general_opts.add_argument(
+        '--help-config-file',
+        action=HelpConfigFileAction, nargs=0,
+        help="Show a help message about the config file format and exit.")
+    general_opts.add_argument(
+        '--version',
+        action='version', version='zhmc_qradar {}'.format(__version__),
+        help="Show the version number of this program and exit.")
+
+    config_opts = parser.add_argument_group('Config options')
+    config_opts.add_argument(
+        '-c', '--config-file', metavar="CONFIGFILE",
         dest='config_file', action='store',
-        required=False, default=default_config_file,
-        help="File path of zhmc_qradar config file to use. "
-            "Default: {}".format(default_config_file))
-    parser.add_argument(
-        "-s", "--since",
-        dest='since', action='store',
-        required=False, default='start',
-        help="Include past log entries since the specified date and time "
-            "If no timezone is specified, the local timezone is assumed. "
-            "Special values: 'start' will include all available past log "
-            "entries; 'now' means the current time. "
-            "Default: start.")
-    parser.add_argument(
-        "-f", "--future",
+        required=False, default=None,
+        help="File path of the config file to use. Default: No config file.")
+    config_opts.add_argument(
+        "--hmc_host",
+        dest='hmc_host', metavar='HOST', action='store',
+        required=False, default=None,
+        help="{}\nOverrides the 'hmc_host' parameter from the config file.".
+        format(CONFIG_PARMS['hmc_host'].desc))
+    config_opts.add_argument(
+        "--hmc_user",
+        dest='hmc_user', metavar='USER', action='store',
+        required=False, default=None,
+        help="{}\nOverrides the 'hmc_user' parameter from the config file.".
+        format(CONFIG_PARMS['hmc_user'].desc))
+    config_opts.add_argument(
+        "--hmc_password",
+        dest='hmc_password', metavar='PASSWORD', action='store',
+        required=False, default=None,
+        help="{}\nOverrides the 'hmc_password' parameter from the config "
+        "file.".
+        format(CONFIG_PARMS['hmc_password'].desc))
+    config_opts.add_argument(
+        '--dest',
+        dest='dest', metavar='DEST', action='store',
+        required=False, default=None,
+        help="{}\nOverrides the 'dest' parameter from the config file.".
+        format(CONFIG_PARMS['dest'].desc))
+    config_opts.add_argument(
+        '--log',
+        dest='logs', metavar='LOG', action='append',
+        required=False, default=None,
+        help="{}\nEach occurrence adds a log. Overrides the 'logs' parameter "
+        "from the config file.".
+        format(CONFIG_PARMS['logs'].desc))
+    config_opts.add_argument(
+        '--since',
+        dest='since', metavar='SINCE', action='store',
+        required=False, default=None,
+        help="{}\nOverrides the 'since' parameter from the config file.".
+        format(CONFIG_PARMS['since'].desc))
+    config_opts.add_argument(
+        '--future',
         dest='future', action='store_true',
-        required=False, default=False,
-        help="Wait for future log entries. Use keyboard interrupt to leave."
-            "Default: Do not wait for future log entries.")
+        required=False, default=None,
+        help="{}\nOverrides the 'future' parameter from the config file.".
+        format(CONFIG_PARMS['future'].desc))
+    config_opts.add_argument(
+        '--no-future',
+        dest='future', action='store_false',
+        required=False, default=None,
+        help="Do not wait for future log entries.\n"
+        "Overrides the 'future' parameter from the config file.")
+
     args = parser.parse_args()
     return args
 
 
 class OutputHandler(object):
+    """
+    Handle the outputting of any log entries to the defined destination.
+    """
 
     def __init__(self, dest):
         self.dest = dest
@@ -114,10 +394,12 @@ class OutputHandler(object):
             type='Type', time='Time', name='Event name', id='ID',
             user='Userid', msg='Message')
         print(out_str)
+        print("-" * 120)
         sys.stdout.flush()
 
     def output_end(self):
-        pass
+        print("-" * 120)
+        sys.stdout.flush()
 
     def output_entries(self, log_entries):
         if self.dest == 'stdout':
@@ -126,7 +408,7 @@ class OutputHandler(object):
                 le_type = le['log-type']
                 hmc_time = le['event-time']
                 le_time = zhmcclient.datetime_from_timestamp(
-                    hmc_time, tzlocal())
+                    hmc_time, tz.tzlocal())
                 le_name = le['event-name']
                 le_id = le['event-id']
                 le_user = le['userid']
@@ -147,6 +429,10 @@ class OutputHandler(object):
 
 
 def get_log_entries(logs, console, begin_time, end_time):
+    """
+    Retrieve the desired types of log entries for a specified time range from
+    the HMC.
+    """
     log_entries = []
     if 'audit' in logs:
         audit_entries = console.get_audit_log(begin_time, end_time)
@@ -168,141 +454,133 @@ def main():
 
     requests.packages.urllib3.disable_warnings()
 
-    try:
+    try:  # transform any of our exceptions to an error exit
+
         args = parse_args()
 
-        config = load_config(args.config_file)
+        config = Config()
+        if args.config_file:
+            config.update_from_file(args.config_file)
+        config.update_from_args(args)
 
-        hmc = get_required_config_parm(config, 'hmc_host')
-        userid = get_required_config_parm(config, 'hmc_user')
-        password = get_required_config_parm(config, 'hmc_password')
-        dest = get_optional_config_parm(config, 'dest', 'stdout')
+        hmc = config.get_parm('hmc_host')
+        userid = config.get_parm('hmc_user')
+        password = config.get_parm('hmc_password')
+        dest = config.get_parm('dest')
+        logs = config.get_parm('logs')
+        since = config.get_parm('since')
+        future = config.get_parm('future')
 
-        permitted_dests = ['stdout']
-        if dest not in permitted_dests:
-            raise UserError(
-                "Config file {} contains parameter '{}' with invalid value: {} "
-                "(permitted values are: {})".
-                format(args.config_file, 'dest', dest,
-                       ', '.join(permitted_dests)))
-
-        permitted_logs = ['security', 'audit']
-        logs = get_optional_config_parm(config, 'logs', ['security', 'audit'])
-        if not all(log in permitted_logs for log in logs):
-            raise UserError(
-                "Config file {} contains parameter '{}' with invalid value: {} "
-                "(permitted is a list of zero or more of the following "
-                "values: {})".
-                format(args.config_file, 'logs', logs,
-                       ', '.join(permitted_logs)))
-
-        if args.since == 'start':
+        if since == 'all':
             begin_time = None
-            since_str = 'start'
-        elif args.since == 'now':
-            begin_time = datetime.now(tzlocal())
+            since_str = 'all'
+        elif since == 'now':
+            begin_time = datetime.now(tz.tzlocal())
             since_str = 'now ({})'.format(begin_time)
         else:
+            assert since is not None
             try:
-                begin_time = parser.parse(args.since)
-                # TODO: Pass tzinfos argument. By default, only UTC is supported
+                begin_time = parser.parse(since)
+                # TODO: Pass tzinfos arg; by default, only UTC is supported.
                 if begin_time.tzinfo is None:
-                    begin_time = begin_time.replace(tzinfo=tzlocal())
+                    begin_time = begin_time.replace(tzinfo=tz.tzlocal())
                 since_str = '{}'.format(begin_time)
             except (ValueError, OverflowError) as exc:
                 raise UserError(
                     "Option -s/--since has an invalid date & time value: {}".
                     format(args.since))
 
-        print("Using HMC {} with userid {} ...".
-              format(hmc, userid))
-        print("Log destination:                 {}".
-              format(dest))
-        print("Gathering these HMC logs:        {}".
-              format(', '.join(logs)))
-        print("Include log entries since:       {}".
-              format(since_str))
-        print("Wait for future log entries:     {}".
-              format('yes (use keyboard interrupt to stop, e.g. Ctrl-C)'
-                     if args.future else 'no'))
+        print("Collector for security and audit logs from an IBM Z HMC.")
+        print("")
+        print("HMC address:                     {}".format(hmc))
+        print("HMC userid:                      {}".format(userid))
+        print("Log destination:                 {}".format(dest))
+        print("Gathering these HMC logs:        {}".format(', '.join(logs)))
+        print("Include log entries since:       {}".format(since_str))
+        print("Wait for future log entries:     {}".format(
+            'yes (use keyboard interrupt to stop, e.g. Ctrl-C)'
+            if future else 'no'))
         print("")
         sys.stdout.flush()
 
-        session = zhmcclient.Session(hmc, userid, password)
-        client = zhmcclient.Client(session)
-        console = client.consoles.console
+        try:  # make sure the session gets logged off
 
-        out_handler = OutputHandler(dest)
-        out_handler.output_begin()
+            session = zhmcclient.Session(hmc, userid, password)
+            client = zhmcclient.Client(session)
+            console = client.consoles.console
 
-        log_entries = get_log_entries(
-            logs, console, begin_time=begin_time, end_time=None)
-        out_handler.output_entries(log_entries)
+            out_handler = OutputHandler(dest)
+            out_handler.output_begin()
 
-        if args.future:
+            log_entries = get_log_entries(
+                logs, console, begin_time=begin_time, end_time=None)
+            out_handler.output_entries(log_entries)
 
-            topic_items = session.get_notification_topics()
-            security_topic_name = None
-            audit_topic_name = None
-            topic_names = list()
-            for topic_item in topic_items:
-                topic_type = topic_item['topic-type']
-                if topic_type == 'security-notification' and 'security' in logs:
-                    security_topic_name = topic_item['topic-name']
-                    topic_names.append(security_topic_name)
-                if topic_type == 'audit-notification' and 'audit' in logs:
-                    audit_topic_name = topic_item['topic-name']
-                    topic_names.append(audit_topic_name)
-
-            if topic_names:
-
-                receiver = zhmcclient.NotificationReceiver(
-                    topic_names, hmc, userid, password)
-
-                try:
-                    while True:
-                        for headers, message in receiver.notifications():
-                            if headers['notification-type'] == 'log-entry':
-                                topic_name = headers['destination']. \
-                                    split('/')[-1]
-                                if topic_name == security_topic_name:
-                                    log_entries = message['log-entries']
-                                    for le in log_entries:
-                                        le['log-type'] = 'Security'
-                                    out_handler.output_entries(log_entries)
-                                elif topic_name == audit_topic_name:
-                                    log_entries = message['log-entries']
-                                    for le in log_entries:
-                                        le['log-type'] = 'Audit'
-                                    out_handler.output_entries(log_entries)
+            if future:
+                topic_items = session.get_notification_topics()
+                security_topic_name = None
+                audit_topic_name = None
+                topic_names = list()
+                for topic_item in topic_items:
+                    topic_type = topic_item['topic-type']
+                    if topic_type == 'security-notification' \
+                            and 'security' in logs:
+                        security_topic_name = topic_item['topic-name']
+                        topic_names.append(security_topic_name)
+                    if topic_type == 'audit-notification' \
+                            and 'audit' in logs:
+                        audit_topic_name = topic_item['topic-name']
+                        topic_names.append(audit_topic_name)
+                if topic_names:
+                    receiver = zhmcclient.NotificationReceiver(
+                        topic_names, hmc, userid, password)
+                    try:  # make sure the receiver gets closed
+                        print("Waiting for future log entries")
+                        sys.stdout.flush()
+                        while True:
+                            for headers, message in receiver.notifications():
+                                if headers['notification-type'] == 'log-entry':
+                                    topic_name = headers['destination']. \
+                                        split('/')[-1]
+                                    if topic_name == security_topic_name:
+                                        log_entries = message['log-entries']
+                                        for le in log_entries:
+                                            le['log-type'] = 'Security'
+                                        out_handler.output_entries(log_entries)
+                                    elif topic_name == audit_topic_name:
+                                        log_entries = message['log-entries']
+                                        for le in log_entries:
+                                            le['log-type'] = 'Audit'
+                                        out_handler.output_entries(log_entries)
+                                    else:
+                                        warnings.warn(
+                                            "Ignoring invalid topic name: {}".
+                                            format(topic_name),
+                                            RuntimeWarning)
                                 else:
                                     warnings.warn(
-                                        "Ignoring invalid topic name: {}".
-                                        format(topic_name),
+                                        "Ignoring invalid notification type: "
+                                        "{}".
+                                        format(headers['notification-type']),
                                         RuntimeWarning)
-                            else:
-                                warnings.warn(
-                                    "Ignoring invalid notification type: {}".
-                                    format(headers['notification-type']),
-                                    RuntimeWarning)
-                        warnings.warn(
-                            "Notification receiver disconnected - reopening",
-                            RuntimeWarning)
-                except KeyboardInterrupt:
-                    print("\nKeyboard interrupt - leaving receiver loop")
-                    sys.stdout.flush()
-                finally:
-                    print("Closing receiver...")
-                    sys.stdout.flush()
-
-                receiver.close()
-
-        out_handler.output_end()
-
-        print("Logging off...")
-        sys.stdout.flush()
-        session.logoff()
-
+                            warnings.warn(
+                                "Notification receiver has disconnected - "
+                                "reopening",
+                                RuntimeWarning)
+                    except KeyboardInterrupt:
+                        out_handler.output_end()
+                        print("Stopping to wait for future log entries")
+                        sys.stdout.flush()
+                    finally:
+                        print("Closing notification receiver")
+                        sys.stdout.flush()
+                        receiver.close()
+            else:
+                out_handler.output_end()
+        finally:
+            print("Logging off")
+            sys.stdout.flush()
+            session.logoff()
     except Error as exc:
         print("zhmc_qradar: error: {}".format(exc))
         sys.exit(1)
