@@ -3,5 +3,5 @@ PyYAML>=3.13 # MIT
 python-dateutil>=2.7.5 # Apache
 requests>=2.20.0 # Apache-2.0
 
-git+https://github.com/zhmcclient/python-zhmcclient.git@andy/multi-topics#egg=zhmcclient
+git+https://github.com/zhmcclient/python-zhmcclient.git@master#egg=zhmcclient
 # zhmcclient>=0.24.0 # Apache-2.0
