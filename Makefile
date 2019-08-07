@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------------
-# Makefile for zhmc-qradar project
+# Makefile for zhmc-log-forwarder project
 #
 # Basic prerequisites for running this Makefile, to be provided manually:
 #   One of these OS platforms:
@@ -55,7 +55,7 @@ else
 endif
 
 # Name of this Python package (top-level Python namespace + Pypi package name)
-package_name := zhmc-qradar
+package_name := zhmc-log-forwarder
 
 # Package version (full version, including any pre-release suffixes, e.g. "0.1.0-alpha1")
 # May end up being empty, if pbr cannot determine the version.
@@ -266,8 +266,8 @@ install: _pip requirements.txt setup.py setup.cfg $(package_py_files)
 	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
 	$(PIP_CMD) install -e .
-	which zhmc_qradar
-	zhmc_qradar --help
+	which zhmc_log_forwarder
+	zhmc_log_forwarder --help
 	@echo 'Done: Installed $(package_name)'
 	@echo '$@ done.'
 

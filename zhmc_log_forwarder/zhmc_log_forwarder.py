@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-QRadar support for the IBM Z HMC, written in pure Python
+A log forwarder for the IBM Z HMC, written in pure Python.
 """
 
 import sys
@@ -32,7 +32,10 @@ from dateutil import parser, tz
 
 import zhmcclient
 
-__version__ = pbr.version.VersionInfo('zhmc-qradar').release_string()
+CMD_NAME = 'zhmc_log_forwarder'
+PACKAGE_NAME = 'zhmc-log-forwarder'
+
+__version__ = pbr.version.VersionInfo(PACKAGE_NAME).release_string()
 
 try:
     textwrap.indent
@@ -127,6 +130,14 @@ CONFIG_PARMS['future'] = ConfigParm(
     desc="""
 Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
 program.
+""")
+CONFIG_PARMS['format'] = ConfigParm(
+    type='string',
+    example_yaml="'{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'",
+    required=False,
+    default='{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}',
+    desc="""
+Format of the output for each log entry. See --help-format for details.
 """)
 
 
@@ -272,7 +283,7 @@ config parameters explained in the --help-config option.
 Here is an example config file:
 
 ---
-# Example zhmc_qradar config file""")
+# Example config file for {}""".format(CMD_NAME))
         for name in CONFIG_PARMS:
             parm = CONFIG_PARMS[name]
             desc_str = parm.desc.strip(' \n')
@@ -280,6 +291,56 @@ Here is an example config file:
             print("\n{}\n{}: {}".
                   format(desc_str, name, parm.example_yaml, desc_str))
         print("")
+        sys.exit(2)
+
+
+class HelpOutputFormatAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""
+The output format for each log entry is defined using a new-style Python
+string format, using predefined names for the fields of the log entry.
+
+The fields can be arbitrarily selected and ordered in the format string,
+and all modifiers supported by Python can be used to determine things like
+adjustment, padding or truncation.
+
+Example (in YAML config file):
+
+    format: '{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'
+
+Supported fields:
+
+* type: The log type: Security, Audit.
+
+* time: The time stamp of the log entry in the standard format for Python
+  datetime objects, e.g. 2019-08-07 05:56:37.177189+02:00.
+
+* name: The name of the log entry if it has one, or the empty string otherwise.
+
+* id: The ID of the log entry.
+
+* user: The HMC userid associated with the log entry, or the empty string if
+  no user is associated with it.
+
+* msg: The fully formatted log message, in English.
+
+* msg_vars: The substitution variables used in the log message, represented as
+  a list of items in the order of their index numbers. Each list item is
+  a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+  The substitution variables for each log message (including their index
+  numbers) are described in the help system of the HMC, in topic 'Introduction'
+  -> 'Audit, Event, and Security Log Messages'.
+
+* detail_msgs: The list of fully formatted detail log messages, in English.
+  Detail messages are rarely present.
+
+* detail_msgs_vars: The substitution variables used in the detail log messages.
+  This is a list of items for each detail message in the same order as
+  in field 'detail_msgs', where each item is a list of substitution variables
+  used in the corresponding detail log message. Each item in that inner list
+  is a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+""")
         sys.exit(2)
 
 
@@ -297,7 +358,7 @@ def parse_args():
         "The log entries can be selected based on log type and time range, "
         "and will be sent to a destination such as stdout or a QRadar "
         "service.",
-        usage="zhmc_qradar [options]",
+        usage="{} [options]".format(CMD_NAME),
         epilog="")
 
     general_opts = parser.add_argument_group('General options')
@@ -314,8 +375,12 @@ def parse_args():
         action=HelpConfigFileAction, nargs=0,
         help="Show a help message about the config file format and exit.")
     general_opts.add_argument(
+        '--help-output-format',
+        action=HelpOutputFormatAction, nargs=0,
+        help="Show a help message about the output formatting and exit.")
+    general_opts.add_argument(
         '--version',
-        action='version', version='zhmc_qradar {}'.format(__version__),
+        action='version', version='{} {}'.format(CMD_NAME, __version__),
         help="Show the version number of this program and exit.")
 
     config_opts = parser.add_argument_group('Config options')
@@ -374,9 +439,32 @@ def parse_args():
         required=False, default=None,
         help="Do not wait for future log entries.\n"
         "Overrides the 'future' parameter from the config file.")
+    config_opts.add_argument(
+        '--format',
+        dest='format', action='store',
+        required=False, default=None,
+        help="{}\nOverrides the 'format' parameter from the config file.".
+        format(CONFIG_PARMS['format'].desc))
 
     args = parser.parse_args()
     return args
+
+
+@attr.attrs
+class LogEntry(object):
+    """
+    Definition of the data maintained for a log entry. This data is independent
+    of output formatting.
+    """
+    type = attr.attrib(type=str)  # type (Security, Audit)
+    time = attr.attrib(type=str)  # time stamp in Python datetime output format
+    name = attr.attrib(type=str)  # name of the log entry
+    id = attr.attrib(type=int)  # ID of the log entry
+    user = attr.attrib(type=str)  # HMC userid associated with log entry
+    msg = attr.attrib(type=str)  # Formatted message
+    msg_vars = attr.attrib(type=list)  # List of subst.vars in message
+    detail_msgs = attr.attrib(type=list)  # List of formatted detail messages
+    detail_msgs_vars = attr.attrib(type=list)  # List of list of subst.vars
 
 
 class OutputHandler(object):
@@ -384,15 +472,30 @@ class OutputHandler(object):
     Handle the outputting of any log entries to the defined destination.
     """
 
-    def __init__(self, dest):
+    def __init__(self, dest, format):
         self.dest = dest
-        self.stdout_format_str = \
-            "{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}"
+        self.stdout_format_str = format
+
+        # Check validity of the format string:
+        try:
+            self.stdout_format_str.format(
+                type='Type', time='Time', name='Event name', id='ID',
+                user='Userid', msg='Message', msg_vars='Message variables',
+                detail_msgs='Detail messages',
+                detail_msgs_vars='Detail messages variables')
+        except KeyError as exc:
+            # KeyError is raised when the format string contains a named
+            # placeholder that is not provided in format().
+            raise UserError(
+                "Config parameter 'format' specifies an invalid field: {}".
+                format(str(exc)))
 
     def output_begin(self):
         out_str = self.stdout_format_str.format(
             type='Type', time='Time', name='Event name', id='ID',
-            user='Userid', msg='Message')
+            user='Userid', msg='Message', msg_vars='Message variables',
+            detail_msgs='Detail messages',
+            detail_msgs_vars='Detail messages variables')
         print(out_str)
         print("-" * 120)
         sys.stdout.flush()
@@ -411,16 +514,26 @@ class OutputHandler(object):
                     hmc_time, tz.tzlocal())
                 le_name = le['event-name']
                 le_id = le['event-id']
-                le_user = le['userid']
+                le_user = le['userid'] or ''
                 le_msg = le['event-message']
-                row = [le_type, le_time, le_name, le_id, le_user, le_msg]
+                data_items = le['event-data-items']
+                data_items = sorted(data_items, key=lambda i: i['data-item-number'])
+                le_msg_vars = [(i['data-item-value'], i['data-item-type'])
+                               for i in data_items]
+                le_detail_msgs = []
+                le_detail_msgs_vars = []
+                row = LogEntry(
+                    type=le_type, time=le_time, name=le_name, id=le_id,
+                    user=le_user, msg=le_msg, msg_vars=le_msg_vars,
+                    detail_msgs=le_detail_msgs,
+                    detail_msgs_vars=le_detail_msgs_vars)
                 table.append(row)
-            sort_row_index = 1  # time column
-            sorted_table = sorted(table, key=lambda row: row[sort_row_index])
+            sorted_table = sorted(table, key=lambda row: row.time)
             for row in sorted_table:
                 out_str = self.stdout_format_str.format(
-                    type=row[0], time=str(row[1]), name=row[2], id=row[3],
-                    user=row[4] or '', msg=row[5])
+                    type=row.type, time=str(row.time), name=row.name,
+                    id=row.id, user=row.user, msg=row.msg,
+                    msg_vars=row.msg_vars)
                 print(out_str)
             sys.stdout.flush()
         elif self.dest == 'qradar':
@@ -470,6 +583,7 @@ def main():
         logs = config.get_parm('logs')
         since = config.get_parm('since')
         future = config.get_parm('future')
+        format = config.get_parm('format')
 
         if since == 'all':
             begin_time = None
@@ -487,8 +601,11 @@ def main():
                 since_str = '{}'.format(begin_time)
             except (ValueError, OverflowError) as exc:
                 raise UserError(
-                    "Option -s/--since has an invalid date & time value: {}".
+                    "Config parameter 'since' has an invalid date & time "
+                    "value: {}".
                     format(args.since))
+
+        out_handler = OutputHandler(dest, format)  # Checks validity of format
 
         print("Collector for security and audit logs from an IBM Z HMC.")
         print("")
@@ -509,7 +626,6 @@ def main():
             client = zhmcclient.Client(session)
             console = client.consoles.console
 
-            out_handler = OutputHandler(dest)
             out_handler.output_begin()
 
             log_entries = get_log_entries(
@@ -582,7 +698,7 @@ def main():
             sys.stdout.flush()
             session.logoff()
     except Error as exc:
-        print("zhmc_qradar: error: {}".format(exc))
+        print("{}: error: {}".format(CMD_NAME, exc))
         sys.exit(1)
 
 
