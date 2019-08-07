@@ -267,7 +267,7 @@ install: _pip requirements.txt setup.py setup.cfg $(package_py_files)
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
 	$(PIP_CMD) install -e .
 	which zhmc_log_forwarder
-	zhmc_log_forwarder --help
+	zhmc_log_forwarder --version
 	@echo 'Done: Installed $(package_name)'
 	@echo '$@ done.'
 
