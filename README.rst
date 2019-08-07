@@ -1,4 +1,4 @@
-.. Copyright 2016-2017 IBM Corp. All Rights Reserved.
+.. Copyright 2019-2019 IBM Corp. All Rights Reserved.
 ..
 .. Licensed under the Apache License, Version 2.0 (the "License");
 .. you may not use this file except in compliance with the License.
@@ -13,12 +13,12 @@
 .. limitations under the License.
 ..
 
-zhmc-log-forwarder - A log forwarder for the IBM Z HMC, written in pure Python
-==============================================================================
+A log forwarder for the IBM Z HMC
+=================================
 
-.. image:: https://img.shields.io/pypi/v/zhmc_log_forwarder.svg
-    :target: https://pypi.python.org/pypi/zhmc_log_forwarder/
-    :alt: Version on Pypi
+.. .. image:: https://img.shields.io/pypi/v/zhmc-log-forwarder.svg
+..    :target: https://pypi.python.org/pypi/zhmc-log-forwarder/
+..    :alt: Version on Pypi
 
 .. .. image:: https://travis-ci.org/zhmcclient/zhmc-log-forwarder.svg?branch=master
 ..     :target: https://travis-ci.org/zhmcclient/zhmc-log-forwarder
@@ -51,39 +51,44 @@ written in pure Python.
 
 It contains a command named ``zhmc_log_forwarder`` that collects security logs
 and audit logs from the Z HMC and forwards the log entries to various
-destinations, such as a QRadar service or the local syslog.
+destinations, such as stdout, the local syslog, or a QRadar service.
 
 Installation
 ============
-
-The quick way:
 
 .. code-block:: bash
 
     $ pip install zhmc-log-forwarder
 
-.. For more details, see the `Installation section`_ in the documentation.
+For more details, see the `Installation section`_ in the documentation.
 
 .. _Installation section: http://zhmc-log-forwarder.readthedocs.io/en/stable/intro.html#installation
 
 Quickstart
-===========
+==========
 
-1. Create a zhmc_log_forwarder config file, that specifies the targeted HMC and desired
-   destination for the logs.
+1.  Create a zhmc_log_forwarder config file, that specifies the targeted HMC,
+    desired destination for the logs, and other data.
 
-   **TBD: Provide an example config file.**
+    An example config file is shown when invoking:
 
-2. Start the script as a job (it runs forever):
+    .. code-block:: text
 
-.. code-block:: text
+        zhmc_log_forwarder --help-config-file
 
-    zhmc_log_forwarder -c config_file
+2.  Start the program:
+
+    .. code-block:: text
+
+        zhmc_log_forwarder -c CONFIGFILE
+
+    If the 'future' config parameter is set to true, the program runs forever
+    because it waits for any future log entries to be created.
 
 Documentation
 =============
 
-The zhmc_log_forwarder documentation is on RTD:
+The zhmc-log-forwarder documentation is on RTD:
 
 * `Documentation for latest version on Pypi`_
 * `Documentation for master branch in Git repo`_
@@ -102,6 +107,6 @@ For information on how to contribute to this project, see the
 License
 =======
 
-The zhmc_log_forwarder package is licensed under the `Apache 2.0 License`_.
+The zhmc-log-forwarder package is licensed under the `Apache 2.0 License`_.
 
 .. _Apache 2.0 License: https://github.com/zhmcclient/zhmc-log-forwarder/tree/master/LICENSE

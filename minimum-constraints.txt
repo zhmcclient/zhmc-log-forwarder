@@ -1,3 +1,4 @@
+# ------------------------------------------------------------------------------
 # Pip constraints file for runtime and development.
 #
 # This constraints file specifies constraints that match the minimum versions
@@ -7,14 +8,11 @@
 # (see zhmcclient issue #199 as one example where a minimum version was
 # missing).
 
-# The versions specified in this file were the latest versions released on Pypi
-# as of zhmcclient v0.9.0 (2016-12-27, see Travis CI run #576
-# https://travis-ci.org/zhmcclient/python-zhmcclient/builds/186986898).
-
 # Make sure that the package versions in minimum-constraints.txt are also
 # the minimum versions required in requirements.txt and dev-requirements.txt.
 
 
+# ------------------------------------------------------------------------------
 # Dependencies for installation with Pip (must be installed in a separate pip call)
 #
 # Info: OS-installed package versions for some Linux distros:
@@ -42,28 +40,23 @@ setuptools==33.1.1
 wheel==0.29.0
 
 
-# Direct dependencies for runtime (must be consistent with requirements.txt)
+# ------------------------------------------------------------------------------
+# Dependencies for runtime (must be consistent with requirements.txt):
 
-decorator==4.0.10
+# Direct dependencies:
+
+attrs==17.4.0
 pbr==1.10.0
-pytz==2016.10
-requests==2.20.0
-six==1.10.0
-stomp.py==4.1.15
-
-
-# Indirect dependencies for runtime (must be consistent with requirements.txt)
-
-certifi==2016.9.26
-chardet==3.0.3
-idna==2.5
-urllib3==1.21.1
-
-
-# Direct dependencies for development (must be consistent with dev-requirements.txt)
-
-# zhmcclient examples (imports into the example scripts):
 PyYAML==3.13
+python-dateutil==2.7.5
+requests==2.20.0
+# zhmcclient==0.24.0
+
+# Indirect dependencies that are needed to address issues:
+# None
+
+# ------------------------------------------------------------------------------
+# Dependencies for development (must be consistent with dev-requirements.txt):
 
 # Tests (imports into testcases):
 pytest==3.0.5
@@ -94,15 +87,14 @@ flake8==3.7.0
 pyflakes==2.1.0
 pycodestyle==2.5.0
 
-
 # Twine (no imports, invoked via twine script):
 twine==1.8.1
 
-# Jupyter Notebook (no imports, invoked via jupyter script):
-jupyter==1.0.0
+# Indirect dependencies that are needed to address issues:
+# None
 
-
-# Indirect dependencies for development (must be consistent with dev-requirements.txt)
+# ------------------------------------------------------------------------------
+# Remaining dependencies (not in any other requirements file):
 
 alabaster==0.7.9
 appnope==0.1.0 #; sys_platform == "darwin"

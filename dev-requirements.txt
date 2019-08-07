@@ -1,7 +1,64 @@
-flake8>=3.5.0 # MIT
-pytest>=3.8.0 # MIT
-pytest-cov>=2.6.0 # MIT
-python-coveralls>=2.9.1 # Apache-2.0
-pbr>=4.2.0 # Apache-2.0
-twine>=1.11.0 # Apache-2.0
-sphinx>=1.8.0 # Simplified BSD
+# ------------------------------------------------------------------------------
+# Pip requirements file for development dependencies.
+#
+# The order of packages is significant, because pip processes them in the order
+# of appearance. Changing the order has an impact on the overall integration
+# process, which may cause wedges in the gate later.
+
+# Make sure that the package versions in minimum-constraints.txt are also
+# the minimum versions required in requirements.txt and dev-requirements.txt.
+
+
+# Runtime dependencies:
+-r requirements.txt
+
+
+# Direct dependencies:
+
+# Tests (imports into testcases):
+pytest>=3.0.5 # MIT
+# mock>=2.0.0 # BSD
+# requests-mock>=1.2.0 # Apache-2.0
+# testfixtures>=4.13.3 # Apache-2.0
+# yamlordereddictloader>=0.4.0
+
+# Tests (no imports, invoked via py.test script):
+
+# TODO: Remove the pinning of the pytest-cov version again once issue
+#       https://github.com/z4r/python-coveralls/issues/66
+#       is resolved.
+#       Background: pytest-cov 2.6.0 has increased the version
+#       requirement for the coverage package from >=3.7.1 to
+#       >=4.4, which is in conflict with the version requirement
+#       defined by the python-coveralls package for coverage==4.0.3.
+pytest-cov>=2.4.0,<2.6 # BSD
+
+# Coverage reporting (no imports, invoked via coveralls script):
+python-coveralls>=2.9.0 # Apache-2.0
+
+# Sphinx (no imports, invoked via sphinx-build script):
+Sphinx>=1.7.6,<2.0.0; python_version < '3.5'  # BSD
+Sphinx>=1.7.6,<2.0.0; python_version >= '3.5'  # BSD
+# TODO: On py3.5+, Sphinx currently fails, see issue
+#       https://github.com/sphinx-doc/sphinx/issues/6246. Therefore, Sphinx has
+#       been pinned to below 2.0.0 also for py3.5+.
+sphinx-git>=10.1.1 # GPL
+GitPython>=2.1.1 # BSD
+
+# PyLint (no imports, invoked via pylint script):
+pylint>=1.6.4; python_version == '2.7'
+
+# Flake8 (no imports, invoked via flake8 script):
+flake8>=3.7.0 # MIT
+# Note: Flake8 requires pyflakes>=2.1.0 and pycodestyle>=2.5.0, but for reasons
+#       not understood, the resulting installation has pycodestyle 2.2.0,
+#       causing issues. Workaround is to specify these dependencies here.
+pyflakes>=2.1.0 # MIT
+pycodestyle>=2.5.0 # MIT
+
+# Twine (no imports, invoked via twine script):
+twine>=1.8.1 # Apache-2.0
+
+
+# Indirect dependencies that are needed to address issues:
+# None

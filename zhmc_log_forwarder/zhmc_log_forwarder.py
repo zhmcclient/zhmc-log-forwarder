@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-A log forwarder for the IBM Z HMC, written in pure Python.
+A log forwarder for the IBM Z HMC.
 """
 
 import sys
@@ -29,13 +29,13 @@ import pbr
 import yaml
 import requests.packages.urllib3
 from dateutil import parser, tz
-
 import zhmcclient
 
 CMD_NAME = 'zhmc_log_forwarder'
 PACKAGE_NAME = 'zhmc-log-forwarder'
-
 __version__ = pbr.version.VersionInfo(PACKAGE_NAME).release_string()
+BLANKED_SECRET = '********'
+
 
 try:
     textwrap.indent
@@ -77,25 +77,25 @@ class ConfigParm(object):
     allowed = attr.attrib(type=list, default=None)  # list of allowed values
     required = attr.attrib(type=bool, default=False)  # required or optional
     default = attr.attrib(type=str, default=None)  # default value if optional
-    example_yaml = attr.attrib(type=str, default=None)  # example for file
-
+    example = attr.attrib(type=str, default=None)  # example value
+    secret = attr.attrib(type=bool, default=False)  # blanked out on display
 
 # Definition of all configuration parameters for this script.
 CONFIG_PARMS = OrderedDict()
 CONFIG_PARMS['hmc_host'] = ConfigParm(
-    type='string', example_yaml="'10.11.12.13'",
-    required=True,
+    type='string',
+    required=True, example='10.11.12.13',
     desc="IP address or hostname of the HMC.")
 CONFIG_PARMS['hmc_user'] = ConfigParm(
-    type='string', example_yaml="myuser",
-    required=True,
+    type='string',
+    required=True, example='myuser',
     desc="HMC userid.")
 CONFIG_PARMS['hmc_password'] = ConfigParm(
-    type='string', example_yaml="mypassword",
-    required=True,
+    type='string',
+    required=True, example='mypassword', secret=True,
     desc="HMC password.")
 CONFIG_PARMS['dest'] = ConfigParm(
-    type='string', example_yaml="stdout",
+    type='string',
     allowed=['stdout'],
     required=False, default='stdout',
     desc="""
@@ -103,7 +103,7 @@ Destination for the log entries:
 - 'stdout': Standard output.
 """)
 CONFIG_PARMS['logs'] = ConfigParm(
-    type='list/tuple of string', example_yaml="[security, audit]",
+    type='list/tuple of string',
     allowed=['security', 'audit'],
     required=False, default=['security', 'audit'],
     desc="""
@@ -112,7 +112,7 @@ List of log types to include, with the following list item values:
 - 'audit': HMC Audit Log.
 """)
 CONFIG_PARMS['since'] = ConfigParm(
-    type='string', example_yaml="now",
+    type='string',
     required=False, default='now',
     desc="""
 Include past log entries since the specified date and time, or since a special
@@ -125,19 +125,19 @@ Values are:
   entries from recent past.
 """)
 CONFIG_PARMS['future'] = ConfigParm(
-    type='bool', example_yaml="false",
-    required=False, default=False,
+    type='bool',
+    required=False, default=True,
     desc="""
 Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
 program.
 """)
 CONFIG_PARMS['format'] = ConfigParm(
     type='string',
-    example_yaml="'{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'",
     required=False,
-    default='{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}',
+    default='{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}',
     desc="""
-Format of the output for each log entry. See --help-format for details.
+Format of the output for each log entry. Invoke with --help-output-format for
+details.
 """)
 
 
@@ -150,21 +150,22 @@ class Config(object):
     See CONFIG_PARMS for details.
     """
 
-    def __init__(self):
+    def __init__(self, verbose):
 
         # Config parameters: dict of name to value.
         # Parameters not specified are omitted from the dict.
         self.parms = dict()
+        self.verbose = verbose
 
         # Set defaults of optional parameters
         for name in CONFIG_PARMS:
             parm = CONFIG_PARMS[name]
             if not parm.required:
+                if self.verbose:
+                    value_str = BLANKED_SECRET if parm.secret else parm.default
+                    print("Setting config parm '{}' to default value: {}".
+                          format(name, value_str))
                 self.parms[name] = parm.default
-
-    def __repr__(self):
-        repr_str = "Config({})".format(self.parms)
-        return repr_str
 
     def update_from_file(self, filepath):
         """
@@ -213,6 +214,7 @@ class Config(object):
         """
         parm = CONFIG_PARMS[name]
         if parm.allowed is not None:
+            assert not parm.secret
             if parm.type.startswith('list'):
                 if not all(v in parm.allowed for v in value):
                     raise UserError(
@@ -225,6 +227,10 @@ class Config(object):
                         "Config parameter '{}' from {} has an invalid "
                         "value: {} (allowed values are: {}).".
                         format(name, source, value, ', '.join(parm.allowed)))
+        if self.verbose:
+            value_str = BLANKED_SECRET if parm.secret else value
+            print("Setting config parm '{}' from {} to: {}".
+                  format(name, source, value_str))
         self.parms[name] = value
 
     def get_parm(self, name):
@@ -277,20 +283,22 @@ class HelpConfigFileAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-The config file is in YAML format and contains zero or more of the
-config parameters explained in the --help-config option.
+The config file is in YAML format and contains zero or more config parameters.
 
-Here is an example config file:
+Here is an example config file, with all supported config parameters and their
+definitions as YAML comments:
 
 ---
-# Example config file for {}""".format(CMD_NAME))
+# Example {} config file
+""".format(CMD_NAME))
         for name in CONFIG_PARMS:
             parm = CONFIG_PARMS[name]
             desc_str = parm.desc.strip(' \n')
             desc_str = indent(desc_str, 1, '# ')
-            print("\n{}\n{}: {}".
-                  format(desc_str, name, parm.example_yaml, desc_str))
-        print("")
+            print(desc_str)
+            example_value = parm.example or parm.default
+            yaml_str = yaml.dump({name: example_value})
+            print(yaml_str)
         sys.exit(2)
 
 
@@ -305,16 +313,20 @@ The fields can be arbitrarily selected and ordered in the format string,
 and all modifiers supported by Python can be used to determine things like
 adjustment, padding or truncation.
 
-Example (in YAML config file):
+Example for use in a config file:
 
     format: '{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'
+
+Example for using a command line option:
+
+    --format '{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'
 
 Supported fields:
 
 * type: The log type: Security, Audit.
 
-* time: The time stamp of the log entry in the standard format for Python
-  datetime objects, e.g. 2019-08-07 05:56:37.177189+02:00.
+* time: The time stamp of the log entry in the standard string format for
+  Python datetime objects, e.g. 2019-08-07 05:56:37.177189+02:00.
 
 * name: The name of the log entry if it has one, or the empty string otherwise.
 
@@ -328,6 +340,7 @@ Supported fields:
 * msg_vars: The substitution variables used in the log message, represented as
   a list of items in the order of their index numbers. Each list item is
   a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+
   The substitution variables for each log message (including their index
   numbers) are described in the help system of the HMC, in topic 'Introduction'
   -> 'Audit, Event, and Security Log Messages'.
@@ -352,14 +365,18 @@ def parse_args():
     Returns:
         argparse.Namespace: Dictionary with parsing results.
     """
+
     parser = argparse.ArgumentParser(
         add_help=False,
-        description="Collector for security and audit logs from an IBM Z HMC. "
-        "The log entries can be selected based on log type and time range, "
-        "and will be sent to a destination such as stdout or a QRadar "
-        "service.",
+        description="A log forwarder for the IBM Z HMC. "
+        "The log entries can be selected based on log type (security / audit) "
+        "and time range, and will be sent to a destination such as stdout, "
+        "the local system log, or a QRadar service. "
+        "It is possible to wait in a loop for future log entries to be "
+        "created.",
         usage="{} [options]".format(CMD_NAME),
-        epilog="")
+        epilog="Invoke with --help-config to see the optionality and defaults "
+        "for config parameters.")
 
     general_opts = parser.add_argument_group('General options')
     general_opts.add_argument(
@@ -369,7 +386,8 @@ def parse_args():
     general_opts.add_argument(
         '--help-config',
         action=HelpConfigAction, nargs=0,
-        help="Show a help message about the config parameters and exit.")
+        help="Show a help message about the config parameters (including "
+        "optionality and defaults) and exit.")
     general_opts.add_argument(
         '--help-config-file',
         action=HelpConfigFileAction, nargs=0,
@@ -382,67 +400,65 @@ def parse_args():
         '--version',
         action='version', version='{} {}'.format(CMD_NAME, __version__),
         help="Show the version number of this program and exit.")
+    general_opts.add_argument(
+        '--verbose',
+        dest='verbose', action='store_true',
+        help="Show additional information.")
 
+    # Note: Because the optionality and default values are defined in the
+    # CONFIG_PARMS variable, the argument definitions here must all define
+    # required=False, default=None (both being default for add_argument(),
+    # except for store_true/false actions).
     config_opts = parser.add_argument_group('Config options')
     config_opts.add_argument(
         '-c', '--config-file', metavar="CONFIGFILE",
         dest='config_file', action='store',
-        required=False, default=None,
         help="File path of the config file to use. Default: No config file.")
     config_opts.add_argument(
         "--hmc_host",
         dest='hmc_host', metavar='HOST', action='store',
-        required=False, default=None,
         help="{}\nOverrides the 'hmc_host' parameter from the config file.".
         format(CONFIG_PARMS['hmc_host'].desc))
     config_opts.add_argument(
         "--hmc_user",
         dest='hmc_user', metavar='USER', action='store',
-        required=False, default=None,
         help="{}\nOverrides the 'hmc_user' parameter from the config file.".
         format(CONFIG_PARMS['hmc_user'].desc))
     config_opts.add_argument(
         "--hmc_password",
         dest='hmc_password', metavar='PASSWORD', action='store',
-        required=False, default=None,
         help="{}\nOverrides the 'hmc_password' parameter from the config "
         "file.".
         format(CONFIG_PARMS['hmc_password'].desc))
     config_opts.add_argument(
         '--dest',
         dest='dest', metavar='DEST', action='store',
-        required=False, default=None,
         help="{}\nOverrides the 'dest' parameter from the config file.".
         format(CONFIG_PARMS['dest'].desc))
     config_opts.add_argument(
         '--log',
         dest='logs', metavar='LOG', action='append',
-        required=False, default=None,
         help="{}\nEach occurrence adds a log. Overrides the 'logs' parameter "
         "from the config file.".
         format(CONFIG_PARMS['logs'].desc))
     config_opts.add_argument(
         '--since',
         dest='since', metavar='SINCE', action='store',
-        required=False, default=None,
         help="{}\nOverrides the 'since' parameter from the config file.".
         format(CONFIG_PARMS['since'].desc))
     config_opts.add_argument(
         '--future',
-        dest='future', action='store_true',
-        required=False, default=None,
+        dest='future', action='store_true', default=None,
         help="{}\nOverrides the 'future' parameter from the config file.".
         format(CONFIG_PARMS['future'].desc))
     config_opts.add_argument(
         '--no-future',
-        dest='future', action='store_false',
-        required=False, default=None,
+        dest='future', action='store_false', default=None,
         help="Do not wait for future log entries.\n"
         "Overrides the 'future' parameter from the config file.")
     config_opts.add_argument(
         '--format',
         dest='format', action='store',
-        required=False, default=None,
         help="{}\nOverrides the 'format' parameter from the config file.".
         format(CONFIG_PARMS['format'].desc))
 
@@ -517,11 +533,12 @@ class OutputHandler(object):
                 le_user = le['userid'] or ''
                 le_msg = le['event-message']
                 data_items = le['event-data-items']
-                data_items = sorted(data_items, key=lambda i: i['data-item-number'])
+                data_items = sorted(data_items,
+                                    key=lambda i: i['data-item-number'])
                 le_msg_vars = [(i['data-item-value'], i['data-item-type'])
                                for i in data_items]
-                le_detail_msgs = []
-                le_detail_msgs_vars = []
+                le_detail_msgs = []  # TODO: Implement
+                le_detail_msgs_vars = []  # TODO: Implement
                 row = LogEntry(
                     type=le_type, time=le_time, name=le_name, id=le_id,
                     user=le_user, msg=le_msg, msg_vars=le_msg_vars,
@@ -571,7 +588,7 @@ def main():
 
         args = parse_args()
 
-        config = Config()
+        config = Config(args.verbose)
         if args.config_file:
             config.update_from_file(args.config_file)
         config.update_from_args(args)
@@ -607,7 +624,8 @@ def main():
 
         out_handler = OutputHandler(dest, format)  # Checks validity of format
 
-        print("Collector for security and audit logs from an IBM Z HMC.")
+        print("")
+        print("{} - a log forwarder for the IBM Z HMC.".format(CMD_NAME))
         print("")
         print("HMC address:                     {}".format(hmc))
         print("HMC userid:                      {}".format(userid))
@@ -651,7 +669,7 @@ def main():
                     receiver = zhmcclient.NotificationReceiver(
                         topic_names, hmc, userid, password)
                     try:  # make sure the receiver gets closed
-                        print("Waiting for future log entries")
+                        print("Starting to wait for future log entries")
                         sys.stdout.flush()
                         while True:
                             for headers, message in receiver.notifications():

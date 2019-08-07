@@ -1,0 +1,38 @@
+---
+# Example zhmc_log_forwarder config file
+
+# IP address or hostname of the HMC.
+hmc_host: '10.11.12.13'
+
+# HMC userid.
+hmc_user: myuser
+
+# HMC password.
+hmc_password: mypassword
+
+# Destination for the log entries:
+# - 'stdout': Standard output.
+dest: stdout
+
+# List of log types to include, with the following list item values:
+# - 'security': HMC Security Log."
+# - 'audit': HMC Audit Log.
+logs: [security, audit]
+
+# Include past log entries since the specified date and time, or since a special
+# date and time.
+# Values are:
+# - A date and time value suitable for dateutil.parser. Timezones are ignored
+#   and the local timezone is assumed instead.
+# - 'all': Include all available past log entries.
+# - 'now': Include past log entries since now. This may actually include log
+#   entries from recent past.
+since: now
+
+# Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
+# program.
+future: true
+
+# Format of the output for each log entry. Invoke with --help-output-format for
+# details.
+format: '{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}'
