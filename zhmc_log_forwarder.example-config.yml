@@ -1,5 +1,5 @@
 ---
-# Example zhmc_qradar config file
+# Example zhmc_log_forwarder config file
 
 # IP address or hostname of HMC
 hmc_host: '10.11.12.13'

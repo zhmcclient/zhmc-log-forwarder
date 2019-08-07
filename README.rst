@@ -13,31 +13,31 @@
 .. limitations under the License.
 ..
 
-zhmc_qradar - QRadar support for the IBM Z HMC, written in pure Python
-======================================================================
+zhmc-log-forwarder - A log forwarder for the IBM Z HMC, written in pure Python
+==============================================================================
 
-.. image:: https://img.shields.io/pypi/v/zhmc_qradar.svg
-    :target: https://pypi.python.org/pypi/zhmc_qradar/
+.. image:: https://img.shields.io/pypi/v/zhmc_log_forwarder.svg
+    :target: https://pypi.python.org/pypi/zhmc_log_forwarder/
     :alt: Version on Pypi
 
-.. .. image:: https://travis-ci.org/zhmcclient/zhmc-qradar.svg?branch=master
-..     :target: https://travis-ci.org/zhmcclient/zhmc-qradar
+.. .. image:: https://travis-ci.org/zhmcclient/zhmc-log-forwarder.svg?branch=master
+..     :target: https://travis-ci.org/zhmcclient/zhmc-log-forwarder
 ..     :alt: Travis test status (master)
 
 .. .. image:: https://ci.appveyor.com/api/projects/status/i022iaeu3dao8j5x/branch/master?svg=true
-..     :target: https://ci.appveyor.com/project/leopoldjuergen/zhmc-qradar
+..     :target: https://ci.appveyor.com/project/leopoldjuergen/zhmc-log-forwarder
 ..     :alt: Appveyor test status (master)
 
-.. .. image:: https://readthedocs.org/projects/zhmc-qradar/badge/?version=latest
-..     :target: http://zhmc-qradar.readthedocs.io/en/latest/
+.. .. image:: https://readthedocs.org/projects/zhmc-log-forwarder/badge/?version=latest
+..     :target: http://zhmc-log-forwarder.readthedocs.io/en/latest/
 ..     :alt: Docs build status (latest)
 
-.. .. image:: https://img.shields.io/coveralls/zhmcclient/zhmc-qradar.svg
-..     :target: https://coveralls.io/r/zhmcclient/zhmc-qradar
+.. .. image:: https://img.shields.io/coveralls/zhmcclient/zhmc-log-forwarder.svg
+..     :target: https://coveralls.io/r/zhmcclient/zhmc-log-forwarder
 ..     :alt: Test coverage (master)
 
-.. .. image:: https://codeclimate.com/github/zhmcclient/zhmc-qradar/badges/gpa.svg
-..     :target: https://codeclimate.com/github/zhmcclient/zhmc-qradar
+.. .. image:: https://codeclimate.com/github/zhmcclient/zhmc-log-forwarder/badges/gpa.svg
+..     :target: https://codeclimate.com/github/zhmcclient/zhmc-log-forwarder
 ..     :alt: Code Climate
 
 .. contents:: Contents:
@@ -46,12 +46,12 @@ zhmc_qradar - QRadar support for the IBM Z HMC, written in pure Python
 Overview
 ========
 
-The zhmc_qradar package provides QRadar support for the IBM Z HMC, written in
-pure Python.
+The zhmc-log-forwarder package provides a log forwarder for the IBM Z HMC,
+written in pure Python.
 
-It provides a zhmc_qradar program that runs as a kind of bridge between the
-HMC and a QRadar services, and forwards the Security Log and the Audit Log
-of the HMC to the QRadar service.
+It contains a command named ``zhmc_log_forwarder`` that collects security logs
+and audit logs from the Z HMC and forwards the log entries to various
+destinations, such as a QRadar service or the local syslog.
 
 Installation
 ============
@@ -60,16 +60,16 @@ The quick way:
 
 .. code-block:: bash
 
-    $ pip install zhmc_qradar
+    $ pip install zhmc-log-forwarder
 
 .. For more details, see the `Installation section`_ in the documentation.
 
-.. _Installation section: http://zhmc-qradar.readthedocs.io/en/stable/intro.html#installation
+.. _Installation section: http://zhmc-log-forwarder.readthedocs.io/en/stable/intro.html#installation
 
 Quickstart
 ===========
 
-1. Create a zhmc_qradar config file, that specifies the targeted HMC and desired
+1. Create a zhmc_log_forwarder config file, that specifies the targeted HMC and desired
    destination for the logs.
 
    **TBD: Provide an example config file.**
@@ -78,18 +78,18 @@ Quickstart
 
 .. code-block:: text
 
-    zhmc_qradar -c config_file
+    zhmc_log_forwarder -c config_file
 
 Documentation
 =============
 
-The zhmc_qradar documentation is on RTD:
+The zhmc_log_forwarder documentation is on RTD:
 
 * `Documentation for latest version on Pypi`_
 * `Documentation for master branch in Git repo`_
 
-.. _Documentation for latest version on Pypi: http://zhmc-qradar.readthedocs.io/en/stable/
-.. _Documentation for master branch in Git repo: http://zhmc-qradar.readthedocs.io/en/latest/
+.. _Documentation for latest version on Pypi: http://zhmc-log-forwarder.readthedocs.io/en/stable/
+.. _Documentation for master branch in Git repo: http://zhmc-log-forwarder.readthedocs.io/en/latest/
 
 Contributing
 ============
@@ -97,11 +97,11 @@ Contributing
 For information on how to contribute to this project, see the
 `Development section`_ in the documentation.
 
-.. _Development section: http://zhmc-qradar.readthedocs.io/en/stable/development.html
+.. _Development section: http://zhmc-log-forwarder.readthedocs.io/en/stable/development.html
 
 License
 =======
 
-The zhmc_qradar package is licensed under the `Apache 2.0 License`_.
+The zhmc_log_forwarder package is licensed under the `Apache 2.0 License`_.
 
-.. _Apache 2.0 License: https://github.com/zhmcclient/zhmc-qradar/tree/master/LICENSE
+.. _Apache 2.0 License: https://github.com/zhmcclient/zhmc-log-forwarder/tree/master/LICENSE

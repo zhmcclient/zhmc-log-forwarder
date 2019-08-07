@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-QRadar support for the IBM Z HMC, written in pure Python
+A log forwarder for the IBM Z HMC, written in pure Python.
 """
 
 import sys
@@ -32,7 +32,10 @@ from dateutil import parser, tz
 
 import zhmcclient
 
-__version__ = pbr.version.VersionInfo('zhmc-qradar').release_string()
+CMD_NAME = 'zhmc_log_forwarder'
+PACKAGE_NAME = 'zhmc-log-forwarder'
+
+__version__ = pbr.version.VersionInfo(PACKAGE_NAME).release_string()
 
 try:
     textwrap.indent
@@ -280,7 +283,7 @@ config parameters explained in the --help-config option.
 Here is an example config file:
 
 ---
-# Example zhmc_qradar config file""")
+# Example config file for {}""".format(CMD_NAME))
         for name in CONFIG_PARMS:
             parm = CONFIG_PARMS[name]
             desc_str = parm.desc.strip(' \n')
@@ -355,7 +358,7 @@ def parse_args():
         "The log entries can be selected based on log type and time range, "
         "and will be sent to a destination such as stdout or a QRadar "
         "service.",
-        usage="zhmc_qradar [options]",
+        usage="{} [options]".format(CMD_NAME),
         epilog="")
 
     general_opts = parser.add_argument_group('General options')
@@ -377,7 +380,7 @@ def parse_args():
         help="Show a help message about the output formatting and exit.")
     general_opts.add_argument(
         '--version',
-        action='version', version='zhmc_qradar {}'.format(__version__),
+        action='version', version='{} {}'.format(CMD_NAME, __version__),
         help="Show the version number of this program and exit.")
 
     config_opts = parser.add_argument_group('Config options')
@@ -695,7 +698,7 @@ def main():
             sys.stdout.flush()
             session.logoff()
     except Error as exc:
-        print("zhmc_qradar: error: {}".format(exc))
+        print("{}: error: {}".format(CMD_NAME, exc))
         sys.exit(1)
 
 
