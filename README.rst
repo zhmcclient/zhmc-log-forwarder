@@ -53,6 +53,11 @@ It contains a command named ``zhmc_log_forwarder`` that collects security logs
 and audit logs from the Z HMC and forwards the log entries to various
 destinations, such as stdout, the local syslog, or a QRadar service.
 
+The command can gather log entries from the past, since a specified date and
+time, or since specific points such as now or all available entries.
+The command can in addition subscribe for notifications from the HMC about new
+log entries, so that it can wait for any future log entries to appear.
+
 Installation
 ============
 
@@ -81,9 +86,6 @@ Quickstart
     .. code-block:: text
 
         zhmc_log_forwarder -c CONFIGFILE
-
-    If the 'future' config parameter is set to true, the program runs forever
-    because it waits for any future log entries to be created.
 
 Documentation
 =============
