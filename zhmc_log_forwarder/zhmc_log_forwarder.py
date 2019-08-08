@@ -23,6 +23,9 @@ import warnings
 from datetime import datetime
 from collections import OrderedDict
 import textwrap
+import logging
+from logging.handlers import SysLogHandler
+import socket
 
 import attr
 import pbr
@@ -95,15 +98,10 @@ CONFIG_PARMS['hmc_password'] = ConfigParm(
     type='string',
     required=True, example='mypassword', secret=True,
     desc="HMC password.")
-CONFIG_PARMS['dest'] = ConfigParm(
+CONFIG_PARMS['label'] = ConfigParm(
     type='string',
-    allowed=['stdout', 'syslog'],
-    required=False, default='stdout',
-    desc="""
-Destination for the log entries:
-- 'stdout': Standard output.
-- 'syslog': Local or remote system log.
-""")
+    required=False, default=None, example='myregion-myzone-myhmc',
+    desc="Label for this HMC to be used in log output (as field 'label').")
 CONFIG_PARMS['logs'] = ConfigParm(
     type='list/tuple of string',
     allowed=['security', 'audit'],
@@ -132,6 +130,42 @@ CONFIG_PARMS['future'] = ConfigParm(
     desc="""
 Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
 program.
+""")
+CONFIG_PARMS['dest'] = ConfigParm(
+    type='string',
+    allowed=['stdout', 'syslog'],
+    required=False, default='stdout',
+    desc="""
+Destination for the log entries:
+- 'stdout': Standard output.
+- 'syslog': Local or remote system log.
+""")
+CONFIG_PARMS['syslog_host'] = ConfigParm(
+    type='string',
+    required=False, default=None, example='10.11.12.14',
+    desc="""
+IP address or hostname of the remote syslog server, for dest=syslog.
+""")
+CONFIG_PARMS['syslog_port'] = ConfigParm(
+    type='int',
+    required=False, default=514,
+    desc="""
+Port number of the remote syslog server, for dest=syslog.
+""")
+CONFIG_PARMS['syslog_porttype'] = ConfigParm(
+    type='string',
+    allowed=['tcp', 'udp'],
+    required=False, default='udp',
+    desc="""
+Port type of the remote syslog server, for dest=syslog.
+""")
+CONFIG_PARMS['syslog_facility'] = ConfigParm(
+    type='string',
+    allowed=['user', 'auth', 'authpriv', 'security', 'local0', 'local1',
+             'local2', 'local3', 'local4', 'local5', 'local6', 'local7'],
+    required=False, default='user',
+    desc="""
+Syslog facility name, for dest=syslog.
 """)
 CONFIG_PARMS['format'] = ConfigParm(
     type='string',
@@ -317,16 +351,18 @@ adjustment, padding or truncation.
 
 Example for use in a config file:
 
-    format: '{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}'
+    format: '{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}'
 
 Example for using a command line option:
 
-    --format '{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}'
+    --format '{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}'
 
 Supported fields:
 
 * time: The time stamp of the log entry in the standard string format for
   Python datetime objects, e.g. 2019-08-07 05:56:37.177189+02:00.
+
+* label: The label for the HMC that was specified.
 
 * type: The log type: Security, Audit.
 
@@ -433,10 +469,10 @@ def parse_args():
         "file.".
         format(CONFIG_PARMS['hmc_password'].desc))
     config_opts.add_argument(
-        '--dest',
-        dest='dest', metavar='DEST', action='store',
-        help="{}\nOverrides the 'dest' parameter from the config file.".
-        format(CONFIG_PARMS['dest'].desc))
+        "--label",
+        dest='label', metavar='LABEL', action='store',
+        help="{}\nOverrides the 'label' parameter from the config file.".
+        format(CONFIG_PARMS['label'].desc))
     config_opts.add_argument(
         '--log',
         dest='logs', metavar='LOG', action='append',
@@ -459,6 +495,33 @@ def parse_args():
         help="Do not wait for future log entries.\n"
         "Overrides the 'future' parameter from the config file.")
     config_opts.add_argument(
+        '--dest',
+        dest='dest', metavar='DEST', action='store',
+        help="{}\nOverrides the 'dest' parameter from the config file.".
+        format(CONFIG_PARMS['dest'].desc))
+    config_opts.add_argument(
+        '--syslog_host',
+        dest='syslog_host', metavar='HOST', action='store',
+        help="{}\nOverrides the 'syslog_host' parameter from the config file.".
+        format(CONFIG_PARMS['syslog_host'].desc))
+    config_opts.add_argument(
+        '--syslog_port',
+        dest='syslog_port', metavar='PORT', action='store',
+        help="{}\nOverrides the 'syslog_port' parameter from the config file.".
+        format(CONFIG_PARMS['syslog_port'].desc))
+    config_opts.add_argument(
+        '--syslog_porttype',
+        dest='syslog_porttype', metavar='PORTTYPE', action='store',
+        help="{}\nOverrides the 'syslog_porttype' parameter from the config "
+        "file.".
+        format(CONFIG_PARMS['syslog_porttype'].desc))
+    config_opts.add_argument(
+        '--syslog_facility',
+        dest='syslog_facility', metavar='FACILITY', action='store',
+        help="{}\nOverrides the 'syslog_facility' parameter from the config "
+        "file.".
+        format(CONFIG_PARMS['syslog_facility'].desc))
+    config_opts.add_argument(
         '--format',
         dest='format', action='store',
         help="{}\nOverrides the 'format' parameter from the config file.".
@@ -475,6 +538,7 @@ class LogEntry(object):
     of output formatting.
     """
     type = attr.attrib(type=str)  # type (Security, Audit)
+    label = attr.attrib(type=str)  # HMC label
     time = attr.attrib(type=str)  # time stamp in Python datetime output format
     name = attr.attrib(type=str)  # name of the log entry
     id = attr.attrib(type=int)  # ID of the log entry
@@ -490,14 +554,20 @@ class OutputHandler(object):
     Handle the outputting of any log entries to the defined destination.
     """
 
-    def __init__(self, dest, format):
-        self.dest = dest
-        self.stdout_format_str = format
+    def __init__(self, config):
+        self.config = config
+        self.logger = None
+        label_hdr = 'Label'
+        label = self.config.get_parm('label') or ''
+        self.label_len = max(len(label_hdr), len(label))
+        self.label_hdr = label_hdr.ljust(self.label_len)
+        self.label = label.ljust(self.label_len)
 
         # Check validity of the format string:
+        format = self.config.get_parm('format')
         try:
-            self.stdout_format_str.format(
-                type='test', time='test', name='test', id='test',
+            format.format(
+                type='test', label='test', time='test', name='test', id='test',
                 user='test', msg='test', msg_vars='test',
                 detail_msgs='test', detail_msgs_vars='test')
         except KeyError as exc:
@@ -508,26 +578,46 @@ class OutputHandler(object):
                 format(str(exc)))
 
     def output_begin(self):
-        if self.dest == 'stdout':
-            out_str = self.stdout_format_str.format(
-                type='Type', time='Time', name='Name', id='ID',
-                user='Userid', msg='Message', msg_vars='Message variables',
-                detail_msgs='Detail messages',
+        dest = self.config.get_parm('dest')
+        format = self.config.get_parm('format')
+        if dest == 'stdout':
+            out_str = format.format(
+                type='Type', label=self.label_hdr, time='Time', name='Name',
+                id='ID', user='Userid', msg='Message',
+                msg_vars='Message variables', detail_msgs='Detail messages',
                 detail_msgs_vars='Detail messages variables')
             print(out_str)
             print("-" * 120)
             sys.stdout.flush()
-        elif self.dest == 'syslog':
-            # TODO: Implement: Setup logging to syslog
-            raise NotImplementedError
+        else:
+            assert dest == 'syslog'
+            address = (self.config.get_parm('syslog_host'),
+                       self.config.get_parm('syslog_port'))
+            facility_name = self.config.get_parm('syslog_facility')
+            assert facility_name in SysLogHandler.facility_names  # checked
+            facility_code = SysLogHandler.facility_names[facility_name]
+            porttype = self.config.get_parm('syslog_porttype')
+            if porttype == 'tcp':
+                # Newer syslog protocols, e.g. rsyslog
+                socktype = socket.SOCK_STREAM
+            else:
+                assert porttype == 'udp'
+                # Older syslog protocols, e.g. BSD
+                socktype = socket.SOCK_DGRAM
+            handler = SysLogHandler(address, facility_code, socktype=socktype)
+            handler.setFormatter(logging.Formatter('%(message)s'))
+            self.logger = logging.getLogger(CMD_NAME)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
 
     def output_end(self):
-        if self.dest == 'stdout':
+        dest = self.config.get_parm('dest')
+        if dest == 'stdout':
             print("-" * 120)
             sys.stdout.flush()
-        elif self.dest == 'syslog':
-            # TODO: Implement: Probably nothing to do
-            raise NotImplementedError
+        else:
+            assert dest == 'syslog'
+            pass  # nothing to do
 
     def output_entries(self, log_entries):
         table = list()
@@ -545,28 +635,36 @@ class OutputHandler(object):
                                 key=lambda i: i['data-item-number'])
             le_msg_vars = [(i['data-item-value'], i['data-item-type'])
                            for i in data_items]
-            le_detail_msgs = []  # TODO: Implement
-            le_detail_msgs_vars = []  # TODO: Implement
+            le_detail_msgs = []  # TODO: Implement detail messages
+            le_detail_msgs_vars = []  # TODO: Implement detail messages vars.
             row = LogEntry(
-                type=le_type, time=le_time, name=le_name, id=le_id,
-                user=le_user, msg=le_msg, msg_vars=le_msg_vars,
+                type=le_type, label=self.label, time=le_time, name=le_name,
+                id=le_id, user=le_user, msg=le_msg, msg_vars=le_msg_vars,
                 detail_msgs=le_detail_msgs,
                 detail_msgs_vars=le_detail_msgs_vars)
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
-        if self.dest == 'stdout':
+        dest = self.config.get_parm('dest')
+        format = self.config.get_parm('format')
+        label = self.label
+        if dest == 'stdout':
             for row in sorted_table:
-                out_str = self.stdout_format_str.format(
-                    type=row.type, time=str(row.time), name=row.name,
-                    id=row.id, user=row.user, msg=row.msg,
-                    msg_vars=row.msg_vars,
-                    detail_msgs=row.detail_msgs,
+                out_str = format.format(
+                    type=row.type, label=row.label, time=str(row.time),
+                    name=row.name, id=row.id, user=row.user, msg=row.msg,
+                    msg_vars=row.msg_vars, detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
                 print(out_str)
             sys.stdout.flush()
-        elif self.dest == 'syslog':
-            # TODO: Implement
-            raise NotImplementedError
+        else:
+            assert dest == 'syslog'
+            for row in sorted_table:
+                out_str = format.format(
+                    type=row.type, label=row.label, time=str(row.time),
+                    name=row.name, id=row.id, user=row.user, msg=row.msg,
+                    msg_vars=row.msg_vars, detail_msgs=row.detail_msgs,
+                    detail_msgs_vars=row.detail_msgs_vars)
+                self.logger.info(out_str)
 
 
 def get_log_entries(logs, console, begin_time, end_time):
@@ -607,11 +705,15 @@ def main():
         hmc = config.get_parm('hmc_host')
         userid = config.get_parm('hmc_user')
         password = config.get_parm('hmc_password')
+        label = config.get_parm('label')
         dest = config.get_parm('dest')
         logs = config.get_parm('logs')
         since = config.get_parm('since')
         future = config.get_parm('future')
-        format = config.get_parm('format')
+        syslog_host = config.get_parm('syslog_host')
+        syslog_port = config.get_parm('syslog_port')
+        syslog_porttype = config.get_parm('syslog_porttype')
+        syslog_facility = config.get_parm('syslog_facility')
 
         if since == 'all':
             begin_time = None
@@ -633,19 +735,27 @@ def main():
                     "value: {}".
                     format(args.since))
 
-        out_handler = OutputHandler(dest, format)  # Checks validity of format
-
+        out_handler = OutputHandler(config)  # Checks validity of format
+        if dest == 'stdout':
+            dest_str = dest
+        else:
+            assert dest == 'syslog'
+            dest_str = "{} (server {}, port {}/{}, facility {})". \
+                format(dest, syslog_host, syslog_port, syslog_porttype,
+                       syslog_facility)
         print("")
-        print("{} - a log forwarder for the IBM Z HMC.".format(CMD_NAME))
+        print("{} version {}".format(CMD_NAME, __version__))
+        print("Log forwarder for the IBM Z HMC.")
         print("")
         print("HMC address:                     {}".format(hmc))
         print("HMC userid:                      {}".format(userid))
-        print("Log destination:                 {}".format(dest))
-        print("Gathering these HMC logs:        {}".format(', '.join(logs)))
-        print("Include log entries since:       {}".format(since_str))
-        print("Wait for future log entries:     {}".format(
+        print("Label for this HMC:              {}".format(label))
+        print("Including these HMC logs:        {}".format(', '.join(logs)))
+        print("Including log entries since:     {}".format(since_str))
+        print("Waiting for future log entries:  {}".format(
             'yes (use keyboard interrupt to stop, e.g. Ctrl-C)'
             if future else 'no'))
+        print("Forwarding to destination:       {}".format(dest_str))
         print("")
         sys.stdout.flush()
 
@@ -719,13 +829,25 @@ def main():
                     finally:
                         print("Closing notification receiver")
                         sys.stdout.flush()
-                        receiver.close()
+                        try:
+                            receiver.close()
+                        except zhmcclient.Error as exc:
+                            print("Ignoring error when closing notification "
+                                  "receiver: {}".format(exc))
+                            sys.stdout.flush()
             else:
                 out_handler.output_end()
+        except KeyboardInterrupt:
+            pass
         finally:
             print("Logging off")
             sys.stdout.flush()
-            session.logoff()
+            try:
+                session.logoff()
+            except zhmcclient.Error as exc:
+                print("Ignoring error when logging off from HMC: {}".
+                      format(exc))
+                sys.stdout.flush()
     except Error as exc:
         print("{}: error: {}".format(CMD_NAME, exc))
         sys.exit(1)
