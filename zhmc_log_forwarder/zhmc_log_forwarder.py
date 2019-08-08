@@ -646,7 +646,6 @@ class OutputHandler(object):
         sorted_table = sorted(table, key=lambda row: row.time)
         dest = self.config.get_parm('dest')
         format = self.config.get_parm('format')
-        label = self.label
         if dest == 'stdout':
             for row in sorted_table:
                 out_str = format.format(
