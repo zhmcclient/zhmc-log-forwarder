@@ -63,7 +63,6 @@ A short overview presentation is here: `IBM_Z_HMC_Log_Forwarder.pdf`_.
 .. _IBM_Z_HMC_Log_Forwarder.pdf: IBM_Z_HMC_Log_Forwarder.pdf
 
 Installation
-
 ============
 
 .. code-block:: bash
