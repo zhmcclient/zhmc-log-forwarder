@@ -65,6 +65,14 @@ class UserError(Error):
     pass
 
 
+class ConnectionError(Error):
+    """
+    Error indicating that there is a connection error either to the HMC or to
+    the remote syslog server.
+    """
+    pass
+
+
 @attr.attrs
 class ConfigParm(object):
     """
@@ -604,7 +612,12 @@ class OutputHandler(object):
                 assert porttype == 'udp'
                 # Older syslog protocols, e.g. BSD
                 socktype = socket.SOCK_DGRAM
-            handler = SysLogHandler(address, facility_code, socktype=socktype)
+            try:
+                handler = SysLogHandler(address, facility_code, socktype=socktype)
+            except Exception as exc:
+                raise ConnectionError(
+                    "Cannot create logger for syslog server: {}".
+                    format(exc))
             handler.setFormatter(logging.Formatter('%(message)s'))
             self.logger = logging.getLogger(CMD_NAME)
             self.logger.addHandler(handler)
@@ -663,7 +676,12 @@ class OutputHandler(object):
                     name=row.name, id=row.id, user=row.user, msg=row.msg,
                     msg_vars=row.msg_vars, detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
-                self.logger.info(out_str)
+                try:
+                    self.logger.info(out_str)
+                except Exception as exc:
+                    raise ConnectionError(
+                        "Cannot write log entry to syslog server: {}".
+                        format(exc))
 
 
 def get_log_entries(logs, console, begin_time, end_time):
