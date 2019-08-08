@@ -54,8 +54,14 @@ else
   PLATFORM := $(shell uname -s)
 endif
 
-# Name of this Python package (top-level Python namespace + Pypi package name)
+# Name of this package on Pypi
 package_name := zhmc-log-forwarder
+
+# Pypi package name translated to underscore (e.g. used for .whl files)
+package_name_under := zhmc_log_forwarder
+
+# Name of top level Python namespace
+module_name := zhmc_log_forwarder
 
 # Package version (full version, including any pre-release suffixes, e.g. "0.1.0-alpha1")
 # May end up being empty, if pbr cannot determine the version.
@@ -71,15 +77,15 @@ python_version_fn := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s%
 dist_dir := dist
 
 # Distribution archives (as built by setup.py)
-bdist_file := $(dist_dir)/$(package_name)-$(package_version)-py2.py3-none-any.whl
+bdist_file := $(dist_dir)/$(package_name_under)-$(package_version)-py2.py3-none-any.whl
 sdist_file := $(dist_dir)/$(package_name)-$(package_version).tar.gz
 
 dist_files := $(bdist_file) $(sdist_file)
 
 # Source files in the package
 package_py_files := \
-    $(wildcard $(package_name)/*.py) \
-    $(wildcard $(package_name)/*/*.py) \
+    $(wildcard $(module_name)/*.py) \
+    $(wildcard $(module_name)/*/*.py) \
 
 # Directory for generated API documentation
 doc_build_dir := build_doc
@@ -171,86 +177,12 @@ help:
 	@echo '  PYTHON_CMD=... - Name of python command. Default: python'
 	@echo '  PIP_CMD=... - Name of pip command. Default: pip'
 
-.PHONY: _check_version
-_check_version:
-ifeq (,$(package_version))
-	@echo 'Error: Package version could not be determine: (requires pbr; run "make develop")'
-	@false
-else
-	@true
-endif
-
-.PHONY: _pip
-_pip:
-	#$(PYTHON_CMD) remove_duplicate_setuptools.py
-	@echo 'Installing/upgrading pip, setuptools, wheel and pbr with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel pbr
-
 .PHONY: develop
-develop: _pip dev-requirements.txt requirements.txt
-	@echo 'Installing runtime and development requirements with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PIP_CMD) install $(pip_level_opts) -r dev-requirements.txt
+develop: develop_$(python_version_fn).done
 	@echo '$@ done.'
 
-.PHONY: build
-build: $(build_files)
-	@echo '$@ done.'
-
-.PHONY: builddoc
-builddoc: html
-	@echo '$@ done.'
-
-.PHONY: html
-html: $(doc_build_dir)/html/docs/index.html
-	@echo '$@ done.'
-
-$(doc_build_dir)/html/docs/index.html: Makefile $(doc_dependent_files)
-	rm -fv $@
-	$(doc_cmd) -b html $(doc_opts) $(doc_build_dir)/html
-	@echo "Done: Created the HTML pages with top level file: $@"
-
-.PHONY: pdf
-pdf: Makefile $(doc_dependent_files)
-	rm -fv $@
-	$(doc_cmd) -b latex $(doc_opts) $(doc_build_dir)/pdf
-	@echo "Running LaTeX files through pdflatex..."
-	$(MAKE) -C $(doc_build_dir)/pdf all-pdf
-	@echo "Done: Created the PDF files in: $(doc_build_dir)/pdf/"
-	@echo '$@ done.'
-
-.PHONY: man
-man: Makefile $(doc_dependent_files)
-	rm -fv $@
-	$(doc_cmd) -b man $(doc_opts) $(doc_build_dir)/man
-	@echo "Done: Created the manual pages in: $(doc_build_dir)/man/"
-	@echo '$@ done.'
-
-.PHONY: docchanges
-docchanges:
-	$(doc_cmd) -b changes $(doc_opts) $(doc_build_dir)/changes
-	@echo
-	@echo "Done: Created the doc changes overview file in: $(doc_build_dir)/changes/"
-	@echo '$@ done.'
-
-.PHONY: doclinkcheck
-doclinkcheck:
-	$(doc_cmd) -b linkcheck $(doc_opts) $(doc_build_dir)/linkcheck
-	@echo
-	@echo "Done: Look for any errors in the above output or in: $(doc_build_dir)/linkcheck/output.txt"
-	@echo '$@ done.'
-
-.PHONY: doccoverage
-doccoverage:
-	$(doc_cmd) -b coverage $(doc_opts) $(doc_build_dir)/coverage
-	@echo "Done: Created the doc coverage results in: $(doc_build_dir)/coverage/python.txt"
-	@echo '$@ done.'
-
-.PHONY: pyshow
-pyshow:
-	which $(PYTHON_CMD)
-	$(PYTHON_CMD) --version
-	which $(PIP_CMD)
-	$(PIP_CMD) --version
+.PHONY: install
+install: install_$(python_version_fn).done
 	@echo '$@ done.'
 
 .PHONY: check
@@ -261,42 +193,20 @@ check: flake8.log
 pylint: pylint.log
 	@echo '$@ done.'
 
-.PHONY: install
-install: _pip requirements.txt setup.py setup.cfg $(package_py_files)
-	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
-	$(PIP_CMD) install -e .
-	which zhmc_log_forwarder
-	zhmc_log_forwarder --version
-	@echo 'Done: Installed $(package_name)'
-	@echo '$@ done.'
-
-.PHONY: uninstall
-uninstall:
-	bash -c '$(PIP_CMD) show $(package_name) >/dev/null; if [ $$? -eq 0 ]; then $(PIP_CMD) uninstall -y $(package_name); fi'
-	@echo '$@ done.'
-
 .PHONY: test
 test: $(test_log_file)
 	@echo '$@ done.'
 
-.PHONY: clobber
-clobber: uninstall clean
-	rm -Rf $(doc_build_dir) htmlcov .tox
-	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file)
-	@echo 'Done: Removed all build products to get to a fresh state.'
+.PHONY: build
+build: $(build_files)
 	@echo '$@ done.'
 
-.PHONY: clean
-clean:
-	rm -Rf build .cache $(package_name).egg-info .eggs
-	rm -f MANIFEST MANIFEST.in AUTHORS ChangeLog .coverage
-	find . -name "*.pyc" -delete -o -name "__pycache__" -delete -o -name "*.tmp" -delete -o -name "tmp_*" -delete
-	@echo 'Done: Cleaned out all temporary files.'
+.PHONY: builddoc
+builddoc: $(doc_build_dir)/html/docs/index.html
 	@echo '$@ done.'
 
 .PHONY: all
-all: develop install check pylint test build builddoc
+all: develop install check test build builddoc
 	@echo '$@ done.'
 
 .PHONY: upload
@@ -313,8 +223,72 @@ else
 	@false
 endif
 
-# Distribution archives.
-$(bdist_file): _check_version Makefile $(dist_dependent_files)
+.PHONY: uninstall
+uninstall:
+	bash -c '$(PIP_CMD) show $(package_name) >/dev/null; if [ $$? -eq 0 ]; then $(PIP_CMD) uninstall -y $(package_name); fi'
+	@echo '$@ done.'
+
+.PHONY: clobber
+clobber: uninstall clean
+	rm -Rf $(doc_build_dir) htmlcov .tox
+	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file) *.done
+	@echo 'Done: Removed all build products to get to a fresh state.'
+	@echo '$@ done.'
+
+.PHONY: clean
+clean:
+	rm -Rf build .cache $(package_name).egg-info .eggs
+	rm -f MANIFEST MANIFEST.in AUTHORS ChangeLog .coverage
+	find . -name "*.pyc" -delete -o -name "__pycache__" -delete -o -name "*.tmp" -delete -o -name "tmp_*" -delete
+	@echo 'Done: Cleaned out all temporary files.'
+	@echo '$@ done.'
+
+.PHONY: pyshow
+pyshow:
+	which $(PYTHON_CMD)
+	$(PYTHON_CMD) --version
+	which $(PIP_CMD)
+	$(PIP_CMD) --version
+	@echo '$@ done.'
+
+.PHONY: _check_version
+_check_version:
+ifeq (,$(package_version))
+	@echo 'Error: Package version could not be determined: (requires pbr; run "make develop")'
+	@false
+else
+	@true
+endif
+
+pip_$(python_version_fn).done:
+	rm -fv $@
+	@echo 'Installing/upgrading pip, setuptools, wheel and pbr with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel pbr
+	touch $@
+
+develop_$(python_version_fn).done: pip_$(python_version_fn).done dev-requirements.txt requirements.txt
+	rm -fv $@
+	@echo 'Installing runtime and development requirements with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	$(PIP_CMD) install $(pip_level_opts) -r dev-requirements.txt
+	touch $@
+	@echo 'Done: Installed runtime and development requirements'
+
+install_$(python_version_fn).done: pip_$(python_version_fn).done requirements.txt setup.py setup.cfg $(package_py_files)
+	rm -fv $@
+	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
+	$(PIP_CMD) install -e .
+	which zhmc_log_forwarder
+	zhmc_log_forwarder --version
+	touch $@
+	@echo 'Done: Installed $(package_name)'
+
+$(doc_build_dir)/html/docs/index.html: Makefile $(doc_dependent_files)
+	rm -fv $@
+	$(doc_cmd) -b html $(doc_opts) $(doc_build_dir)/html
+	@echo "Done: Created the HTML pages with top level file: $@"
+
+$(bdist_file): Makefile $(dist_dependent_files)
 ifneq ($(PLATFORM),Windows)
 	rm -Rfv $(package_name).egg-info .eggs build
 	$(PYTHON_CMD) setup.py bdist_wheel -d $(dist_dir) --universal
@@ -324,7 +298,7 @@ else
 	@false
 endif
 
-$(sdist_file): _check_version Makefile $(dist_dependent_files)
+$(sdist_file): Makefile $(dist_dependent_files)
 ifneq ($(PLATFORM),Windows)
 	rm -Rfv $(package_name).egg-info .eggs build
 	$(PYTHON_CMD) setup.py sdist -d $(dist_dir)
@@ -353,6 +327,6 @@ flake8.log: Makefile $(flake8_rc_file) $(check_py_files)
 
 $(test_log_file): Makefile $(package_py_files) $(test_py_files) .coveragerc
 	rm -fv $@
-	bash -c 'set -o pipefail; PYTHONWARNINGS=ignore py.test $(pytest_no_log_opt) -s $(test_dir) --cov $(package_name) --cov-config .coveragerc --cov-report=html $(pytest_opts) 2>&1 |tee $@.tmp'
+	bash -c 'set -o pipefail; PYTHONWARNINGS=ignore py.test $(pytest_no_log_opt) -s $(test_dir) --cov $(module_name) --cov-config .coveragerc --cov-report=html $(pytest_opts) 2>&1 |tee $@.tmp'
 	mv -f $@.tmp $@
 	@echo 'Done: Created test log file: $@'
