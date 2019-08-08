@@ -848,7 +848,7 @@ def main():
                 print("Ignoring error when logging off from HMC: {}".
                       format(exc))
                 sys.stdout.flush()
-    except Error as exc:
+    except (Error, zhmcclient.Error) as exc:
         print("{}: error: {}".format(CMD_NAME, exc))
         sys.exit(1)
 
