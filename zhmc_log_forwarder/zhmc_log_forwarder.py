@@ -77,8 +77,9 @@ class ConfigParm(object):
     allowed = attr.attrib(type=list, default=None)  # list of allowed values
     required = attr.attrib(type=bool, default=False)  # required or optional
     default = attr.attrib(type=str, default=None)  # default value if optional
-    example = attr.attrib(type=str, default=None)  # example value
+    example = attr.attrib(type=object, default=None)  # example value
     secret = attr.attrib(type=bool, default=False)  # blanked out on display
+
 
 # Definition of all configuration parameters for this script.
 CONFIG_PARMS = OrderedDict()
@@ -96,11 +97,12 @@ CONFIG_PARMS['hmc_password'] = ConfigParm(
     desc="HMC password.")
 CONFIG_PARMS['dest'] = ConfigParm(
     type='string',
-    allowed=['stdout'],
+    allowed=['stdout', 'syslog'],
     required=False, default='stdout',
     desc="""
 Destination for the log entries:
 - 'stdout': Standard output.
+- 'syslog': Local or remote system log.
 """)
 CONFIG_PARMS['logs'] = ConfigParm(
     type='list/tuple of string',
@@ -315,18 +317,18 @@ adjustment, padding or truncation.
 
 Example for use in a config file:
 
-    format: '{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'
+    format: '{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}'
 
 Example for using a command line option:
 
-    --format '{type:8}  {time:32}  {name:12}  {id:>4}  {user:20}  {msg}'
+    --format '{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}'
 
 Supported fields:
 
-* type: The log type: Security, Audit.
-
 * time: The time stamp of the log entry in the standard string format for
   Python datetime objects, e.g. 2019-08-07 05:56:37.177189+02:00.
+
+* type: The log type: Security, Audit.
 
 * name: The name of the log entry if it has one, or the empty string otherwise.
 
@@ -371,7 +373,7 @@ def parse_args():
         description="A log forwarder for the IBM Z HMC. "
         "The log entries can be selected based on log type (security / audit) "
         "and time range, and will be sent to a destination such as stdout, "
-        "the local system log, or a QRadar service. "
+        "or the local or remote system log (used for QRadar). "
         "It is possible to wait in a loop for future log entries to be "
         "created.",
         usage="{} [options]".format(CMD_NAME),
@@ -495,10 +497,9 @@ class OutputHandler(object):
         # Check validity of the format string:
         try:
             self.stdout_format_str.format(
-                type='Type', time='Time', name='Event name', id='ID',
-                user='Userid', msg='Message', msg_vars='Message variables',
-                detail_msgs='Detail messages',
-                detail_msgs_vars='Detail messages variables')
+                type='test', time='test', name='test', id='test',
+                user='test', msg='test', msg_vars='test',
+                detail_msgs='test', detail_msgs_vars='test')
         except KeyError as exc:
             # KeyError is raised when the format string contains a named
             # placeholder that is not provided in format().
@@ -507,53 +508,63 @@ class OutputHandler(object):
                 format(str(exc)))
 
     def output_begin(self):
-        out_str = self.stdout_format_str.format(
-            type='Type', time='Time', name='Event name', id='ID',
-            user='Userid', msg='Message', msg_vars='Message variables',
-            detail_msgs='Detail messages',
-            detail_msgs_vars='Detail messages variables')
-        print(out_str)
-        print("-" * 120)
-        sys.stdout.flush()
+        if self.dest == 'stdout':
+            out_str = self.stdout_format_str.format(
+                type='Type', time='Time', name='Name', id='ID',
+                user='Userid', msg='Message', msg_vars='Message variables',
+                detail_msgs='Detail messages',
+                detail_msgs_vars='Detail messages variables')
+            print(out_str)
+            print("-" * 120)
+            sys.stdout.flush()
+        elif self.dest == 'syslog':
+            # TODO: Implement: Setup logging to syslog
+            raise NotImplementedError
 
     def output_end(self):
-        print("-" * 120)
-        sys.stdout.flush()
+        if self.dest == 'stdout':
+            print("-" * 120)
+            sys.stdout.flush()
+        elif self.dest == 'syslog':
+            # TODO: Implement: Probably nothing to do
+            raise NotImplementedError
 
     def output_entries(self, log_entries):
+        table = list()
+        for le in log_entries:
+            le_type = le['log-type']
+            hmc_time = le['event-time']
+            le_time = zhmcclient.datetime_from_timestamp(
+                hmc_time, tz.tzlocal())
+            le_name = le['event-name']
+            le_id = le['event-id']
+            le_user = le['userid'] or ''
+            le_msg = le['event-message']
+            data_items = le['event-data-items']
+            data_items = sorted(data_items,
+                                key=lambda i: i['data-item-number'])
+            le_msg_vars = [(i['data-item-value'], i['data-item-type'])
+                           for i in data_items]
+            le_detail_msgs = []  # TODO: Implement
+            le_detail_msgs_vars = []  # TODO: Implement
+            row = LogEntry(
+                type=le_type, time=le_time, name=le_name, id=le_id,
+                user=le_user, msg=le_msg, msg_vars=le_msg_vars,
+                detail_msgs=le_detail_msgs,
+                detail_msgs_vars=le_detail_msgs_vars)
+            table.append(row)
+        sorted_table = sorted(table, key=lambda row: row.time)
         if self.dest == 'stdout':
-            table = list()
-            for le in log_entries:
-                le_type = le['log-type']
-                hmc_time = le['event-time']
-                le_time = zhmcclient.datetime_from_timestamp(
-                    hmc_time, tz.tzlocal())
-                le_name = le['event-name']
-                le_id = le['event-id']
-                le_user = le['userid'] or ''
-                le_msg = le['event-message']
-                data_items = le['event-data-items']
-                data_items = sorted(data_items,
-                                    key=lambda i: i['data-item-number'])
-                le_msg_vars = [(i['data-item-value'], i['data-item-type'])
-                               for i in data_items]
-                le_detail_msgs = []  # TODO: Implement
-                le_detail_msgs_vars = []  # TODO: Implement
-                row = LogEntry(
-                    type=le_type, time=le_time, name=le_name, id=le_id,
-                    user=le_user, msg=le_msg, msg_vars=le_msg_vars,
-                    detail_msgs=le_detail_msgs,
-                    detail_msgs_vars=le_detail_msgs_vars)
-                table.append(row)
-            sorted_table = sorted(table, key=lambda row: row.time)
             for row in sorted_table:
                 out_str = self.stdout_format_str.format(
                     type=row.type, time=str(row.time), name=row.name,
                     id=row.id, user=row.user, msg=row.msg,
-                    msg_vars=row.msg_vars)
+                    msg_vars=row.msg_vars,
+                    detail_msgs=row.detail_msgs,
+                    detail_msgs_vars=row.detail_msgs_vars)
                 print(out_str)
             sys.stdout.flush()
-        elif self.dest == 'qradar':
+        elif self.dest == 'syslog':
             # TODO: Implement
             raise NotImplementedError
 
@@ -582,7 +593,7 @@ def main():
     Main routine of the script.
     """
 
-    requests.packages.urllib3.disable_warnings()
+    requests.packages.urllib3.disable_warnings()  # Used by zhmcclient
 
     try:  # transform any of our exceptions to an error exit
 
