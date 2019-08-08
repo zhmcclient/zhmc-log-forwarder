@@ -170,7 +170,7 @@ Syslog facility name, for dest=syslog.
 CONFIG_PARMS['format'] = ConfigParm(
     type='string',
     required=False,
-    default='{time:32}  {type:8}  {name:12}  {id:>4}  {user:20}  {msg}',
+    default='{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}',
     desc="""
 Format of the output for each log entry. Invoke with --help-output-format for
 details.

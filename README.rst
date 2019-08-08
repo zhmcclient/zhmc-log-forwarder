@@ -58,7 +58,12 @@ time, or since specific points such as now or all available entries.
 The command can in addition subscribe for notifications from the HMC about new
 log entries, so that it can wait for any future log entries to appear.
 
+A short overview presentation is here: `IBM Z HMC Log Forwarder.pptx`_.
+
+.. _IBM Z HMC Log Forwarder.pptx: IBM Z HMC Log Forwarder.pptx
+
 Installation
+
 ============
 
 .. code-block:: bash
