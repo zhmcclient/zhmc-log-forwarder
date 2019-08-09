@@ -180,8 +180,17 @@ CONFIG_PARMS['format'] = ConfigParm(
     required=False,
     default='{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}',
     desc="""
-Format of the output for each log entry. Invoke with --help-output-format for
-details.
+Format of the output for each log entry, as a Python new-style format string.
+Invoke with --help-output-format for details on the fields.
+""")
+CONFIG_PARMS['time_format'] = ConfigParm(
+    type='string',
+    required=False,
+    default='%Y-%m-%d %H:%M:%S.%f%z',
+    desc="""
+Format for the 'time' field in the output for each log entry, as a Python
+strftime() format string.
+Invoke with --help-time-format for details.
 """)
 
 
@@ -315,10 +324,14 @@ line options.""")
                 required_str = \
                     "Optional, with default: {}". \
                     format(parm.default)
+            if parm.example:
+                example_str = "\n  Example: {}".format(parm.example)
+            else:
+                example_str = ""
             desc_str = parm.desc.strip(' \n') + '\n' + required_str
             desc_str = indent(desc_str, 2)
-            print("\n* {} ({}):\n{}".
-                  format(name, parm.type, desc_str))
+            print("\n* {} ({}):\n{}{}".
+                  format(name, parm.type, desc_str, example_str))
         print("")
         sys.exit(2)
 
@@ -350,12 +363,13 @@ class HelpOutputFormatAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-The output format for each log entry is defined using a new-style Python
-string format, using predefined names for the fields of the log entry.
+The output format for each log entry is defined in the 'format' config
+parameter using a Python new-style format string, using predefined names for
+the fields of the log entry.
 
-The fields can be arbitrarily selected and ordered in the format string,
-and all modifiers supported by Python can be used to determine things like
-adjustment, padding or truncation.
+The fields can be arbitrarily selected and ordered in the format string, and
+the complete syntax for replacement fields in new-style format strings can be
+used to determine for example adjustment, padding or conversion.
 
 Example for use in a config file:
 
@@ -365,14 +379,19 @@ Example for using a command line option:
 
     --format '{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}'
 
+The format string shown in the examples is also the default.
+
 Supported fields:
 
-* time: The time stamp of the log entry in the standard string format for
-  Python datetime objects, e.g. 2019-08-07 05:56:37.177189+02:00.
+* time: The time stamp of the log entry, as reported by the HMC in the log
+  entry data. This is the time stamp that is also shown in the HMC GUI.
+  The format of this field is defined in the 'time_format' config parameter.
+  Invoke with --help-time-format for details.
 
-* label: The label for the HMC that was specified.
+* label: The label for the HMC that was specified in the 'label' config
+  parameter.
 
-* type: The log type: Security, Audit.
+* type: The log type to which this log entry belongs: Security, Audit.
 
 * name: The name of the log entry if it has one, or the empty string otherwise.
 
@@ -399,6 +418,41 @@ Supported fields:
   in field 'detail_msgs', where each item is a list of substitution variables
   used in the corresponding detail log message. Each item in that inner list
   is a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+""")
+        sys.exit(2)
+
+
+class HelpTimeFormatAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""
+The format for the 'time' field in the output for each log entry is defined in
+the 'time_format' config parameter using a Python strftime() format string, or
+alternatively some keywords:
+
+- iso8601: ISO 8601 format with 'T' as delimiter,
+  e.g. 2019-08-09T12:46:38.550000+02:00
+- iso8601b: ISO 8601 format with ' ' as delimiter,
+  e.g. 2019-08-09 12:46:38.550000+02:00
+- Any other value is interpreted as strftime() format string.
+
+Example for use in a config file:
+
+    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+
+Example for using a command line option:
+
+    --time_format '%Y-%m-%d %H:%M:%S.%f%z'
+
+The format string shown in the examples is also the default.
+
+The syntax for strftime() format strings is described here:
+https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior
+
+The time stamps in the 'time' field are represented using Python datetime
+objects that are timezone-aware. The values for any locale-specific components
+in the strftime() format string are created using the locale of the system on
+which this program runs.
 """)
         sys.exit(2)
 
@@ -442,6 +496,10 @@ def parse_args():
         '--help-output-format',
         action=HelpOutputFormatAction, nargs=0,
         help="Show a help message about the output formatting and exit.")
+    general_opts.add_argument(
+        '--help-time-format',
+        action=HelpTimeFormatAction, nargs=0,
+        help="Show a help message about the time field formatting and exit.")
     general_opts.add_argument(
         '--version',
         action='version', version='{} {}'.format(CMD_NAME, __version__),
@@ -534,6 +592,11 @@ def parse_args():
         dest='format', action='store',
         help="{}\nOverrides the 'format' parameter from the config file.".
         format(CONFIG_PARMS['format'].desc))
+    config_opts.add_argument(
+        '--time_format',
+        dest='time_format', action='store',
+        help="{}\nOverrides the 'time_format' parameter from the config file.".
+        format(CONFIG_PARMS['time_format'].desc))
 
     args = parser.parse_args()
     return args
@@ -545,9 +608,9 @@ class LogEntry(object):
     Definition of the data maintained for a log entry. This data is independent
     of output formatting.
     """
-    type = attr.attrib(type=str)  # type (Security, Audit)
+    time = attr.attrib(type=datetime)  # time stamp as datetime object
     label = attr.attrib(type=str)  # HMC label
-    time = attr.attrib(type=str)  # time stamp in Python datetime output format
+    type = attr.attrib(type=str)  # type (Security, Audit)
     name = attr.attrib(type=str)  # name of the log entry
     id = attr.attrib(type=int)  # ID of the log entry
     user = attr.attrib(type=str)  # HMC userid associated with log entry
@@ -570,12 +633,13 @@ class OutputHandler(object):
         self.label_len = max(len(label_hdr), len(label))
         self.label_hdr = label_hdr.ljust(self.label_len)
         self.label = label.ljust(self.label_len)
+        self.time_format = self.config.get_parm('time_format')
 
         # Check validity of the format string:
         format = self.config.get_parm('format')
         try:
             format.format(
-                type='test', label='test', time='test', name='test', id='test',
+                time='test', label='test', type='test', name='test', id='test',
                 user='test', msg='test', msg_vars='test',
                 detail_msgs='test', detail_msgs_vars='test')
         except KeyError as exc:
@@ -585,12 +649,28 @@ class OutputHandler(object):
                 "Config parameter 'format' specifies an invalid field: {}".
                 format(str(exc)))
 
+        # Check validity of the time_format string:
+        dt = datetime.now()
+        try:
+            self.formatted_time(dt)
+        except UnicodeError as exc:
+            raise UserError(
+                "Config parameter 'time_format' is invalid: {}".
+                format(str(exc)))
+
+    def formatted_time(self, dt):
+        if self.time_format == 'iso8601':
+            return dt.isoformat()
+        if self.time_format == 'iso8601b':
+            return dt.isoformat(' ')
+        return dt.strftime(self.time_format)  # already checked in __init__()
+
     def output_begin(self):
         dest = self.config.get_parm('dest')
         format = self.config.get_parm('format')
         if dest == 'stdout':
             out_str = format.format(
-                type='Type', label=self.label_hdr, time='Time', name='Name',
+                time='Time', label=self.label_hdr, type='Type', name='Name',
                 id='ID', user='Userid', msg='Message',
                 msg_vars='Message variables', detail_msgs='Detail messages',
                 detail_msgs_vars='Detail messages variables')
@@ -613,7 +693,8 @@ class OutputHandler(object):
                 # Older syslog protocols, e.g. BSD
                 socktype = socket.SOCK_DGRAM
             try:
-                handler = SysLogHandler(address, facility_code, socktype=socktype)
+                handler = SysLogHandler(address, facility_code,
+                                        socktype=socktype)
             except Exception as exc:
                 raise ConnectionError(
                     "Cannot create logger for syslog server: {}".
@@ -635,10 +716,10 @@ class OutputHandler(object):
     def output_entries(self, log_entries):
         table = list()
         for le in log_entries:
-            le_type = le['log-type']
             hmc_time = le['event-time']
             le_time = zhmcclient.datetime_from_timestamp(
                 hmc_time, tz.tzlocal())
+            le_type = le['log-type']
             le_name = le['event-name']
             le_id = le['event-id']
             le_user = le['userid'] or ''
@@ -651,7 +732,7 @@ class OutputHandler(object):
             le_detail_msgs = []  # TODO: Implement detail messages
             le_detail_msgs_vars = []  # TODO: Implement detail messages vars.
             row = LogEntry(
-                type=le_type, label=self.label, time=le_time, name=le_name,
+                time=le_time, label=self.label, type=le_type, name=le_name,
                 id=le_id, user=le_user, msg=le_msg, msg_vars=le_msg_vars,
                 detail_msgs=le_detail_msgs,
                 detail_msgs_vars=le_detail_msgs_vars)
@@ -662,9 +743,10 @@ class OutputHandler(object):
         if dest == 'stdout':
             for row in sorted_table:
                 out_str = format.format(
-                    type=row.type, label=row.label, time=str(row.time),
-                    name=row.name, id=row.id, user=row.user, msg=row.msg,
-                    msg_vars=row.msg_vars, detail_msgs=row.detail_msgs,
+                    time=self.formatted_time(row.time), label=row.label,
+                    type=row.type, name=row.name, id=row.id, user=row.user,
+                    msg=row.msg, msg_vars=row.msg_vars,
+                    detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
                 print(out_str)
             sys.stdout.flush()
@@ -672,9 +754,10 @@ class OutputHandler(object):
             assert dest == 'syslog'
             for row in sorted_table:
                 out_str = format.format(
-                    type=row.type, label=row.label, time=str(row.time),
-                    name=row.name, id=row.id, user=row.user, msg=row.msg,
-                    msg_vars=row.msg_vars, detail_msgs=row.detail_msgs,
+                    time=self.formatted_time(row.time), label=row.label,
+                    type=row.type, name=row.name, id=row.id, user=row.user,
+                    msg=row.msg, msg_vars=row.msg_vars,
+                    detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
                 try:
                     self.logger.info(out_str)
