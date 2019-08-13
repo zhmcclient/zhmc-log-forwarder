@@ -246,6 +246,17 @@ class Config(object):
             if not parm.required:
                 self.parms[name] = parm.default
 
+    def __repr__(self):
+
+        # Blank out secret config parms
+        parms_copy = dict(self.parms)
+        for name in self.parms:
+            parm = CONFIG_PARMS[name]
+            if parm.secret:
+                parms_copy[name] = BLANKED_SECRET
+
+        return 'Config({!r})'.format(parms_copy)
+
     def update_from_file(self, filepath):
         """
         Update the configuration from a config file in YAML.
@@ -853,50 +864,46 @@ class SelfLogger(object):
           debug (bool): Show debug self-log messages. This causes causes the
             log level to be increased from INFO to DEBUG.
         """
-        self.config = config
-        self.debug = debug
-        self.logger = None  # Lazy initialization
+        self._config = config
+        self._debug = debug
+        self._logger = None  # Lazy initialization
 
     def _setup(self):
         """
-        Set up the logger.
-
+        Set up the logger, if not yet set up.
         """
-        dest_str = self.config.get_parm('selflog_dest')
-        if dest_str == 'stdout':
-            dest = sys.stdout
-        else:
-            assert dest_str == 'stderr'
-            dest = sys.stderr
-        format = self.config.get_parm('selflog_format')
-        time_format = self.config.get_parm('selflog_time_format')
-        formatter = DatetimeFormatter(fmt=format, datefmt=time_format)
-        handler = StreamHandler(dest)
-        handler.setFormatter(formatter)
-        self.logger = logging.getLogger(SELF_LOGGER_NAME)
-        self.logger.addHandler(handler)
-        log_level = logging.DEBUG if self.debug else logging.INFO
-        self.logger.setLevel(log_level)
+        if self._logger is None:
+            dest_str = self._config.get_parm('selflog_dest')
+            if dest_str == 'stdout':
+                dest = sys.stdout
+            else:
+                assert dest_str == 'stderr'
+                dest = sys.stderr
+            format = self._config.get_parm('selflog_format')
+            time_format = self._config.get_parm('selflog_time_format')
+            formatter = DatetimeFormatter(fmt=format, datefmt=time_format)
+            handler = StreamHandler(dest)
+            handler.setFormatter(formatter)
+            self._logger = logging.getLogger(SELF_LOGGER_NAME)
+            self._logger.addHandler(handler)
+            log_level = logging.DEBUG if self._debug else logging.INFO
+            self._logger.setLevel(log_level)
 
     def debug(self, msg):
-        if not self.logger:
-            self._setup()
-        self.logger.debug(msg)
+        self._setup()
+        self._logger.debug(msg)
 
     def info(self, msg):
-        if not self.logger:
-            self._setup()
-        self.logger.info(msg)
+        self._setup()
+        self._logger.info(msg)
 
     def warning(self, msg):
-        if not self.logger:
-            self._setup()
-        self.logger.warning(msg)
+        self._setup()
+        self._logger.warning(msg)
 
     def error(self, msg):
-        if not self.logger:
-            self._setup()
-        self.logger.error(msg)
+        self._setup()
+        self._logger.error(msg)
 
 
 def get_log_entries(logs, console, begin_time, end_time):
