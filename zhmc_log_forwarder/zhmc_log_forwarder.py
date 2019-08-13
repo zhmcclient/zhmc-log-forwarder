@@ -19,12 +19,12 @@ A log forwarder for the IBM Z HMC.
 
 import sys
 import argparse
-import warnings
 from datetime import datetime
 from collections import OrderedDict
 import textwrap
 import logging
 from logging.handlers import SysLogHandler
+from logging import StreamHandler
 import socket
 
 import attr
@@ -39,6 +39,9 @@ PACKAGE_NAME = 'zhmc-log-forwarder'
 __version__ = pbr.version.VersionInfo(PACKAGE_NAME).release_string()
 BLANKED_SECRET = '********'
 
+DEST_LOGGER_NAME = CMD_NAME + '_dest'
+SELF_LOGGER_NAME = CMD_NAME
+SELF_LOGGER = None  # Will be initialized in main()
 
 try:
     textwrap.indent
@@ -189,7 +192,35 @@ CONFIG_PARMS['time_format'] = ConfigParm(
     default='%Y-%m-%d %H:%M:%S.%f%z',
     desc="""
 Format for the 'time' field in the output for each log entry, as a Python
-strftime() format string.
+datetime.strftime() format string.
+Invoke with --help-time-format for details.
+""")
+CONFIG_PARMS['selflog_dest'] = ConfigParm(
+    type='string',
+    allowed=['stdout', 'stderr'],
+    required=False, default='stdout',
+    desc="""
+Destination for any self-log entries:
+- 'stdout': Standard output.
+- 'stderr': Standard error.
+""")
+CONFIG_PARMS['selflog_format'] = ConfigParm(
+    type='string',
+    required=False,
+    default='%(levelname)s: %(message)s',
+    desc="""
+Format of any self-log entries, as a format string for Python logging.Formatter
+objects.
+See https://docs.python.org/2/library/logging.html#logrecord-attributes for
+details.
+""")
+CONFIG_PARMS['selflog_time_format'] = ConfigParm(
+    type='string',
+    required=False,
+    default='%Y-%m-%d %H:%M:%S.%f%z',
+    desc="""
+Format for the 'asctime' field of any self-log entries, as a Python
+datetime.strftime() format string.
 Invoke with --help-time-format for details.
 """)
 
@@ -203,21 +234,16 @@ class Config(object):
     See CONFIG_PARMS for details.
     """
 
-    def __init__(self, verbose):
+    def __init__(self):
 
         # Config parameters: dict of name to value.
         # Parameters not specified are omitted from the dict.
         self.parms = dict()
-        self.verbose = verbose
 
         # Set defaults of optional parameters
         for name in CONFIG_PARMS:
             parm = CONFIG_PARMS[name]
             if not parm.required:
-                if self.verbose:
-                    value_str = BLANKED_SECRET if parm.secret else parm.default
-                    print("Setting config parm '{}' to default value: {}".
-                          format(name, value_str))
                 self.parms[name] = parm.default
 
     def update_from_file(self, filepath):
@@ -280,10 +306,6 @@ class Config(object):
                         "Config parameter '{}' from {} has an invalid "
                         "value: {} (allowed values are: {}).".
                         format(name, source, value, ', '.join(parm.allowed)))
-        if self.verbose:
-            value_str = BLANKED_SECRET if parm.secret else value
-            print("Setting config parm '{}' from {} to: {}".
-                  format(name, source, value_str))
         self.parms[name] = value
 
     def get_parm(self, name):
@@ -427,14 +449,14 @@ class HelpTimeFormatAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
 The format for the 'time' field in the output for each log entry is defined in
-the 'time_format' config parameter using a Python strftime() format string, or
-alternatively some keywords:
+the 'time_format' config parameter using a Python datetime.strftime() format
+string, or alternatively some keywords:
 
 - iso8601: ISO 8601 format with 'T' as delimiter,
   e.g. 2019-08-09T12:46:38.550000+02:00
 - iso8601b: ISO 8601 format with ' ' as delimiter,
   e.g. 2019-08-09 12:46:38.550000+02:00
-- Any other value is interpreted as strftime() format string.
+- Any other value is interpreted as datetime.strftime() format string.
 
 Example for use in a config file:
 
@@ -444,15 +466,17 @@ Example for using a command line option:
 
     --time_format '%Y-%m-%d %H:%M:%S.%f%z'
 
-The format string shown in the examples is also the default.
+The format for the 'asctime' field in any self-log messages is defined in the
+'selflog_time_format' config parameter also using a Python datetime.strftime()
+format string.
 
-The syntax for strftime() format strings is described here:
+The syntax for datetime.strftime() format strings is described here:
 https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior
 
-The time stamps in the 'time' field are represented using Python datetime
-objects that are timezone-aware. The values for any locale-specific components
-in the strftime() format string are created using the locale of the system on
-which this program runs.
+The datetime objects used for these time stamps are timezone-aware, using the
+local timezone of the system on which this program runs. Any locale-specific
+components in the datetime.strftime() format string are created using the
+locale of the system on which this program runs (e.g. the name of weekdays).
 """)
         sys.exit(2)
 
@@ -505,9 +529,9 @@ def parse_args():
         action='version', version='{} {}'.format(CMD_NAME, __version__),
         help="Show the version number of this program and exit.")
     general_opts.add_argument(
-        '--verbose',
-        dest='verbose', action='store_true',
-        help="Show additional information.")
+        '--debug',
+        dest='debug', action='store_true',
+        help="Show debug self-log messages (if any).")
 
     # Note: Because the optionality and default values are defined in the
     # CONFIG_PARMS variable, the argument definitions here must all define
@@ -626,6 +650,11 @@ class OutputHandler(object):
     """
 
     def __init__(self, config):
+        """
+        Parameters:
+
+          config (Config): The configuration for the program.
+        """
         self.config = config
         self.logger = None
         label_hdr = 'Label'
@@ -679,28 +708,31 @@ class OutputHandler(object):
             sys.stdout.flush()
         else:
             assert dest == 'syslog'
-            address = (self.config.get_parm('syslog_host'),
-                       self.config.get_parm('syslog_port'))
-            facility_name = self.config.get_parm('syslog_facility')
-            assert facility_name in SysLogHandler.facility_names  # checked
-            facility_code = SysLogHandler.facility_names[facility_name]
-            porttype = self.config.get_parm('syslog_porttype')
-            if porttype == 'tcp':
+            self.syslog_host = self.config.get_parm('syslog_host')
+            self.syslog_port = self.config.get_parm('syslog_port')
+            self.syslog_facility = self.config.get_parm('syslog_facility')
+            assert self.syslog_facility in SysLogHandler.facility_names
+            facility_code = SysLogHandler.facility_names[self.syslog_facility]
+            self.syslog_porttype = self.config.get_parm('syslog_porttype')
+            if self.syslog_porttype == 'tcp':
                 # Newer syslog protocols, e.g. rsyslog
                 socktype = socket.SOCK_STREAM
             else:
-                assert porttype == 'udp'
+                assert self.syslog_porttype == 'udp'
                 # Older syslog protocols, e.g. BSD
                 socktype = socket.SOCK_DGRAM
             try:
-                handler = SysLogHandler(address, facility_code,
-                                        socktype=socktype)
+                handler = SysLogHandler(
+                    (self.syslog_host, self.syslog_port), facility_code,
+                    socktype=socktype)
             except Exception as exc:
                 raise ConnectionError(
-                    "Cannot create logger for syslog server: {}".
-                    format(exc))
+                    "Cannot create log handler for syslog server at "
+                    "{host}, port {port}/{porttype}: {msg}".
+                    format(host=self.syslog_host, port=self.syslog_port,
+                           porttype=self.syslog_porttype, msg=str(exc)))
             handler.setFormatter(logging.Formatter('%(message)s'))
-            self.logger = logging.getLogger(CMD_NAME)
+            self.logger = logging.getLogger(DEST_LOGGER_NAME)
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
 
@@ -763,8 +795,108 @@ class OutputHandler(object):
                     self.logger.info(out_str)
                 except Exception as exc:
                     raise ConnectionError(
-                        "Cannot write log entry to syslog server: {}".
-                        format(exc))
+                        "Cannot write log entry to syslog server at "
+                        "{host}, port {port}/{porttype}: {msg}".
+                        format(host=self.syslog_host, port=self.syslog_port,
+                               porttype=self.syslog_porttype, msg=str(exc)))
+
+
+class DatetimeFormatter(logging.Formatter):
+    """
+    Python log formatter that uses datetime for time formatting.
+
+    The reason to have a special formatter is that the time formatting
+    implemented by the standard Python logging.Formatter uses time.strftime()
+    which does not support microseconds.
+
+    This log formatter overrides its formatTime() method to use
+    datetime.strftime() instead. The timezone is set to the local timezone.
+    """
+
+    def formatTime(self, record, datefmt=None):
+        # record (LogRecord): Has the time at which the log record was created
+        #   in the following attributes:
+        #   - record.created (float): Seconds since the epoch. Precision varies
+        #     by system and may or may not include a sub-second value.
+        #   - record.msecs (int): Milliseconds within the second
+        time_value = record.created
+        if time_value.is_integer():
+            time_value += float(record.msecs) / 1000
+        dt = datetime.fromtimestamp(time_value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz.tzlocal())
+        if datefmt:
+            s = dt.strftime(datefmt)
+        else:
+            s = dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+        return s
+
+
+class SelfLogger(object):
+    """
+    Python logger for self-logging.
+
+    Self-logging is the logging of any actions and particularly of failures of
+    this program itself. This is separate from forwarding the HMC log entries.
+
+    At this point, self-logging can be configured to go to stdout or stderr,
+    and the log message format and time format for the log message can be
+    configured.
+    """
+
+    def __init__(self, config, debug):
+        """
+        Parameters:
+
+          config (Config): The configuration for the program.
+
+          debug (bool): Show debug self-log messages. This causes causes the
+            log level to be increased from INFO to DEBUG.
+        """
+        self.config = config
+        self.debug = debug
+        self.logger = None  # Lazy initialization
+
+    def _setup(self):
+        """
+        Set up the logger.
+
+        """
+        dest_str = self.config.get_parm('selflog_dest')
+        if dest_str == 'stdout':
+            dest = sys.stdout
+        else:
+            assert dest_str == 'stderr'
+            dest = sys.stderr
+        format = self.config.get_parm('selflog_format')
+        time_format = self.config.get_parm('selflog_time_format')
+        formatter = DatetimeFormatter(fmt=format, datefmt=time_format)
+        handler = StreamHandler(dest)
+        handler.setFormatter(formatter)
+        self.logger = logging.getLogger(SELF_LOGGER_NAME)
+        self.logger.addHandler(handler)
+        log_level = logging.DEBUG if self.debug else logging.INFO
+        self.logger.setLevel(log_level)
+
+    def debug(self, msg):
+        if not self.logger:
+            self._setup()
+        self.logger.debug(msg)
+
+    def info(self, msg):
+        if not self.logger:
+            self._setup()
+        self.logger.info(msg)
+
+    def warning(self, msg):
+        if not self.logger:
+            self._setup()
+        self.logger.warning(msg)
+
+    def error(self, msg):
+        if not self.logger:
+            self._setup()
+        self.logger.error(msg)
 
 
 def get_log_entries(logs, console, begin_time, end_time):
@@ -797,10 +929,12 @@ def main():
 
         args = parse_args()
 
-        config = Config(args.verbose)
+        config = Config()
         if args.config_file:
             config.update_from_file(args.config_file)
         config.update_from_args(args)
+
+        SELF_LOGGER = SelfLogger(config, args.debug)
 
         hmc = config.get_parm('hmc_host')
         userid = config.get_parm('hmc_user')
@@ -843,21 +977,20 @@ def main():
             dest_str = "{} (server {}, port {}/{}, facility {})". \
                 format(dest, syslog_host, syslog_port, syslog_porttype,
                        syslog_facility)
-        print("")
-        print("{} version {}".format(CMD_NAME, __version__))
-        print("Log forwarder for the IBM Z HMC.")
-        print("")
-        print("HMC address:                     {}".format(hmc))
-        print("HMC userid:                      {}".format(userid))
-        print("Label for this HMC:              {}".format(label))
-        print("Including these HMC logs:        {}".format(', '.join(logs)))
-        print("Including log entries since:     {}".format(since_str))
-        print("Waiting for future log entries:  {}".format(
-            'yes (use keyboard interrupt to stop, e.g. Ctrl-C)'
-            if future else 'no'))
-        print("Forwarding to destination:       {}".format(dest_str))
-        print("")
-        sys.stdout.flush()
+
+        SELF_LOGGER.info(
+            "{} starting".format(CMD_NAME))
+        SELF_LOGGER.info(
+            "{} version: {}".format(CMD_NAME, __version__))
+        SELF_LOGGER.info(
+            "HMC: {host}, Userid: {user}, Label: {label}".
+            format(host=hmc, user=userid, label=label))
+        SELF_LOGGER.info(
+            "Logs: {logs}, Since: {since}, Future: {future}".
+            format(logs=', '.join(logs), since=since_str, future=future))
+        SELF_LOGGER.info(
+            "Destination: {dest}".
+            format(dest=dest_str))
 
         try:  # make sure the session gets logged off
 
@@ -890,8 +1023,8 @@ def main():
                     receiver = zhmcclient.NotificationReceiver(
                         topic_names, hmc, userid, password)
                     try:  # make sure the receiver gets closed
-                        print("Starting to wait for future log entries")
-                        sys.stdout.flush()
+                        SELF_LOGGER.info(
+                            "Starting to wait for future log entries")
                         while True:
                             for headers, message in receiver.notifications():
                                 if headers['notification-type'] == 'log-entry':
@@ -908,49 +1041,50 @@ def main():
                                             le['log-type'] = 'Audit'
                                         out_handler.output_entries(log_entries)
                                     else:
-                                        warnings.warn(
+                                        SELF_LOGGER.warning(
                                             "Ignoring invalid topic name: {}".
-                                            format(topic_name),
-                                            RuntimeWarning)
+                                            format(topic_name))
                                 else:
-                                    warnings.warn(
+                                    SELF_LOGGER.warning(
                                         "Ignoring invalid notification type: "
                                         "{}".
-                                        format(headers['notification-type']),
-                                        RuntimeWarning)
-                            warnings.warn(
+                                        format(headers['notification-type']))
+                            SELF_LOGGER.warning(
                                 "Notification receiver has disconnected - "
-                                "reopening",
-                                RuntimeWarning)
+                                "reopening")
                     except KeyboardInterrupt:
                         out_handler.output_end()
-                        print("Stopping to wait for future log entries")
-                        sys.stdout.flush()
+                        SELF_LOGGER.info(
+                            "Received keyboard interrupt - stopping to wait "
+                            "for future log entries")
                     finally:
-                        print("Closing notification receiver")
-                        sys.stdout.flush()
+                        SELF_LOGGER.info(
+                            "Closing notification receiver")
                         try:
                             receiver.close()
                         except zhmcclient.Error as exc:
-                            print("Ignoring error when closing notification "
-                                  "receiver: {}".format(exc))
-                            sys.stdout.flush()
+                            SELF_LOGGER.warning(
+                                "Ignoring error when closing notification "
+                                "receiver: {}".format(exc))
             else:
                 out_handler.output_end()
         except KeyboardInterrupt:
             pass
         finally:
-            print("Logging off")
-            sys.stdout.flush()
+            SELF_LOGGER.info(
+                "Logging off from HMC")
             try:
                 session.logoff()
             except zhmcclient.Error as exc:
-                print("Ignoring error when logging off from HMC: {}".
-                      format(exc))
-                sys.stdout.flush()
+                SELF_LOGGER.warning(
+                    "Ignoring error when logging off from HMC: {}".
+                    format(exc))
     except (Error, zhmcclient.Error) as exc:
-        print("{}: error: {}".format(CMD_NAME, exc))
+        SELF_LOGGER.error(str(exc))
         sys.exit(1)
+
+    SELF_LOGGER.info(
+        "{} stopped".format(CMD_NAME))
 
 
 if __name__ == '__main__':
