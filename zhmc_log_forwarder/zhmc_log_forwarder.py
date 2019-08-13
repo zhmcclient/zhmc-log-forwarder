@@ -406,11 +406,11 @@ used to determine for example adjustment, padding or conversion.
 
 Example for use in a config file:
 
-    format: '{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}'
+    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
 
 Example for using a command line option:
 
-    --format '{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}'
+    --format '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
 
 The format string shown in the examples is also the default.
 
@@ -424,7 +424,7 @@ Supported fields:
 * label: The label for the HMC that was specified in the 'label' config
   parameter.
 
-* type: The log type to which this log entry belongs: Security, Audit.
+* log: The HMC log to which this log entry belongs: Security, Audit.
 
 * name: The name of the log entry if it has one, or the empty string otherwise.
 
@@ -504,8 +504,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         add_help=False,
         description="A log forwarder for the IBM Z HMC. "
-        "The log entries can be selected based on log type (security / audit) "
-        "and time range, and will be sent to a destination such as stdout, "
+        "The log entries can be selected based on log (security / audit) and "
+        "time range, and will be sent to a destination such as stdout, "
         "or the local or remote system log (used for QRadar). "
         "It is possible to wait in a loop for future log entries to be "
         "created.",
@@ -643,10 +643,10 @@ class LogEntry(object):
     Definition of the data maintained for a log entry. This data is independent
     of output formatting.
     """
-    time = attr.attrib(type=datetime)  # time stamp as datetime object
+    time = attr.attrib(type=datetime)  # Time stamp as datetime object
     label = attr.attrib(type=str)  # HMC label
-    type = attr.attrib(type=str)  # type (Security, Audit)
-    name = attr.attrib(type=str)  # name of the log entry
+    log = attr.attrib(type=str)  # HMC log (Security, Audit)
+    name = attr.attrib(type=str)  # Name of the log entry
     id = attr.attrib(type=int)  # ID of the log entry
     user = attr.attrib(type=str)  # HMC userid associated with log entry
     msg = attr.attrib(type=str)  # Formatted message
@@ -679,7 +679,7 @@ class OutputHandler(object):
         format = self.config.get_parm('format')
         try:
             format.format(
-                time='test', label='test', type='test', name='test', id='test',
+                time='test', label='test', log='test', name='test', id='test',
                 user='test', msg='test', msg_vars='test',
                 detail_msgs='test', detail_msgs_vars='test')
         except KeyError as exc:
@@ -710,7 +710,7 @@ class OutputHandler(object):
         format = self.config.get_parm('format')
         if dest == 'stdout':
             out_str = format.format(
-                time='Time', label=self.label_hdr, type='Type', name='Name',
+                time='Time', label=self.label_hdr, log='Log', name='Name',
                 id='ID', user='Userid', msg='Message',
                 msg_vars='Message variables', detail_msgs='Detail messages',
                 detail_msgs_vars='Detail messages variables')
@@ -762,7 +762,7 @@ class OutputHandler(object):
             hmc_time = le['event-time']
             le_time = zhmcclient.datetime_from_timestamp(
                 hmc_time, tz.tzlocal())
-            le_type = le['log-type']
+            le_log = le['log-type']
             le_name = le['event-name']
             le_id = le['event-id']
             le_user = le['userid'] or ''
@@ -775,7 +775,7 @@ class OutputHandler(object):
             le_detail_msgs = []  # TODO: Implement detail messages
             le_detail_msgs_vars = []  # TODO: Implement detail messages vars.
             row = LogEntry(
-                time=le_time, label=self.label, type=le_type, name=le_name,
+                time=le_time, label=self.label, log=le_log, name=le_name,
                 id=le_id, user=le_user, msg=le_msg, msg_vars=le_msg_vars,
                 detail_msgs=le_detail_msgs,
                 detail_msgs_vars=le_detail_msgs_vars)
@@ -787,7 +787,7 @@ class OutputHandler(object):
             for row in sorted_table:
                 out_str = format.format(
                     time=self.formatted_time(row.time), label=row.label,
-                    type=row.type, name=row.name, id=row.id, user=row.user,
+                    log=row.log, name=row.name, id=row.id, user=row.user,
                     msg=row.msg, msg_vars=row.msg_vars,
                     detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
@@ -798,7 +798,7 @@ class OutputHandler(object):
             for row in sorted_table:
                 out_str = format.format(
                     time=self.formatted_time(row.time), label=row.label,
-                    type=row.type, name=row.name, id=row.id, user=row.user,
+                    log=row.log, name=row.name, id=row.id, user=row.user,
                     msg=row.msg, msg_vars=row.msg_vars,
                     detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
