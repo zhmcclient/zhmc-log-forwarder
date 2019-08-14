@@ -649,11 +649,16 @@ def parse_args():
     parser = argparse.ArgumentParser(
         add_help=False,
         description="A log forwarder for the IBM Z HMC. "
-        "The log entries can be selected based on HMC log (security / audit) "
-        "and time range, and will be sent to one or more destinations such "
-        "as stdout, or a syslog server (used for QRadar). "
+        "The log entries can be selected based on HMC log type (e.g. Security "
+        "log, Audit log) and based on the point in time since when past log "
+        "entries should be forwarded. "
         "It is possible to wait in a loop for future log entries to be "
-        "created.",
+        "created."
+        "Destinations can be standard output, standard error, or a syslog "
+        "server. Multiple destinations are supported in parallel, e.g. "
+        "the HMC Audit log can be sent to a QRadar syslog server, and "
+        "both the HMC Audit log and Security log can be sent to a logDNA "
+        "syslog server.",
         usage="{} [options]".format(CMD_NAME),
         epilog=None)
 
