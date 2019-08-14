@@ -1,5 +1,5 @@
 ---
-# Example zhmc_log_forwarder config file
+# Example config file
 
 # IP address or hostname of the HMC.
 hmc_host: 10.11.12.13
@@ -10,63 +10,27 @@ hmc_user: myuser
 # HMC password.
 hmc_password: mypassword
 
-# Label for this HMC to be used in log output (as field 'label').
+# Label for the HMC to be used in the log message (as field 'label').
 label: myregion-myzone-myhmc
 
-# List of log types to include, with the following list item values:
-# - 'security': HMC Security Log."
-# - 'audit': HMC Audit Log.
-logs:
-- security
-- audit
-
-# Include past log entries since the specified date and time, or since a special
-# date and time.
-# Values are:
-# - A date and time value suitable for dateutil.parser. Timezones are ignored
-#   and the local timezone is assumed instead.
-# - 'all': Include all available past log entries.
+# Point in time since when past log entries are included:
 # - 'now': Include past log entries since now. This may actually include log
-#   entries from recent past.
+#   entries from the recent past.
+# - 'all': Include all available past log entries.
+# - A date and time string suitable for Python dateutil.parser. Timezones in
+#   the string are ignored and the local timezone is used instead.
 since: now
 
-# Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
-# program.
+# Wait for future log entries.
 future: true
-
-# Destination for the log entries:
-# - 'stdout': Standard output.
-# - 'syslog': Local or remote system log.
-dest: stdout
-
-# IP address or hostname of the remote syslog server, for dest=syslog.
-syslog_host: 10.11.12.14
-
-# Port number of the remote syslog server, for dest=syslog.
-syslog_port: 514
-
-# Port type of the remote syslog server, for dest=syslog.
-syslog_porttype: udp
-
-# Syslog facility name, for dest=syslog.
-syslog_facility: user
-
-# Format of the output for each log entry, as a Python new-style format string.
-# Invoke with --help-output-format for details on the fields.
-format: '{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}'
-
-# Format for the 'time' field in the output for each log entry, as a Python
-# datetime.strftime() format string.
-# Invoke with --help-time-format for details.
-time_format: '%Y-%m-%d %H:%M:%S.%f%z'
 
 # Destination for any self-log entries:
 # - 'stdout': Standard output.
 # - 'stderr': Standard error.
 selflog_dest: stdout
 
-# Format of any self-log entries, as a format string for Python logging.Formatter
-# objects.
+# Format of any self-log entries, as a format string for Python
+# logging.Formatter objects.
 # See https://docs.python.org/2/library/logging.html#logrecord-attributes for
 # details.
 selflog_format: '%(levelname)s: %(message)s'
@@ -75,3 +39,42 @@ selflog_format: '%(levelname)s: %(message)s'
 # datetime.strftime() format string.
 # Invoke with --help-time-format for details.
 selflog_time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+
+# List of log forwardings. A log forwarding mainly defines a set of logs to
+# collect, and a destination to forward them to.
+forwardings:
+
+  -
+    # Name of the forwarding (unique within configuration).
+    name: Example forwarding
+
+    # List of HMC logs to include:
+    # - 'security': HMC Security Log.
+    # - 'audit': HMC Audit Log.
+    logs: [security, audit]
+
+    # Destination:
+    # - 'stdout': Standard output.
+    # - 'syslog': Local or remote system log.
+    dest: stdout
+
+    # IP address or hostname of the syslog server (for syslog destinations).
+    syslog_host: 10.11.12.14
+
+    # Port number of the syslog server (for syslog destinations).
+    syslog_port: 514
+
+    # Port type of the syslog server (for syslog destinations).
+    syslog_porttype: udp
+
+    # Syslog facility name (for syslog destinations).
+    syslog_facility: user
+
+    # Log message format, as a Python new-style format string.
+    # Invoke with --help-log-format for details.
+    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
+
+    # Format for the 'time' field in the log message, as a Python
+    # datetime.strftime() format string.
+    # Invoke with --help-time-format for details.
+    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
