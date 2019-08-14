@@ -17,21 +17,23 @@
 A log forwarder for the IBM Z HMC.
 """
 
+from __future__ import print_function
 import sys
 import argparse
 from datetime import datetime
-from collections import OrderedDict
 import textwrap
 import logging
 from logging.handlers import SysLogHandler
 from logging import StreamHandler
 import socket
+import jsonschema
 
 import attr
 import pbr
 import yaml
 import requests.packages.urllib3
-from dateutil import parser, tz
+from dateutil import parser as dateutil_parser
+from dateutil import tz as dateutil_tz
 import zhmcclient
 
 CMD_NAME = 'zhmc_log_forwarder'
@@ -56,14 +58,14 @@ else:
 
 class Error(Exception):
     """
-    Abstract base class for any errors raised by this script.
+    Abstract base class for any errors raised by this program.
     """
     pass
 
 
 class UserError(Error):
     """
-    Error indicating that the user of the script made an error.
+    Error indicating that the user of the program made an error.
     """
     pass
 
@@ -76,343 +78,485 @@ class ConnectionError(Error):
     pass
 
 
-@attr.attrs
-class ConfigParm(object):
+# JSON schema describing the structure of config files
+CONFIG_FILE_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "http://example.com/root.json",
+    "definitions": {},
+    "type": "object",
+    "title": "zhmc_log_forwarder config file",
+    "required": [
+        "hmc_host",
+        "hmc_user",
+        "hmc_password",
+    ],
+    "additionalProperties": False,
+    "properties": {
+        "hmc_host": {
+            "$id": "#/properties/hmc_host",
+            "type": "string",
+            "title": "IP address or hostname of the HMC",
+            "examples": [
+                "10.11.12.13"
+            ],
+        },
+        "hmc_user": {
+            "$id": "#/properties/hmc_user",
+            "type": "string",
+            "title": "HMC userid",
+            "examples": [
+                "myuser"
+            ],
+        },
+        "hmc_password": {
+            "$id": "#/properties/hmc_password",
+            "type": "string",
+            "title": "HMC password",
+            "examples": [
+                "mypassword"
+            ],
+        },
+        "label": {
+            "$id": "#/properties/label",
+            "type": "string",
+            "title": "Label for the HMC to be used in log message "
+            "(as field 'label').",
+            "default": None,
+            "examples": [
+                "myregion-myzone-myhmc"
+            ],
+        },
+        "since": {
+            "$id": "#/properties/since",
+            "type": "string",
+            "title": "Point in time since when log entries are to be "
+            "included, as follows:"
+            " - 'now': Include past log entries since now. This may "
+            "actually include log entries from recent past.",
+            " - 'all': Include all available past log entries."
+            " - A date and time value suitable for dateutil.parser. "
+            "Timezones are ignored and the local timezone is assumed "
+            "instead."
+            "default": "now",
+            "examples": [
+                "now", "all", "13:00", "2018-08-11 16:00"
+            ],
+        },
+        "future": {
+            "$id": "#/properties/future",
+            "type": "boolean",
+            "title": "Wait for future log entries",
+            "default": False,
+            "examples": [
+                True, False
+            ]
+        },
+        "selflog_dest": {
+            "$id": "#/properties/selflog_dest",
+            "type": "string",
+            "title": "Destination for any self-log messages, as follows:"
+            " - 'stdout': Standard output."
+            " - 'stderr': Standard error.",
+            "enum": ["stdout", "stderr"],
+            "default": "stdout",
+            "examples": [
+                "stdout", "stderr"
+            ],
+        },
+        "selflog_format": {
+            "$id": "#/properties/selflog_format",
+            "type": "string",
+            "title": "Format of any self-log messages, as a format string for "
+            "Python logging.Formatter objects. See "
+            "https://docs.python.org/2/library/logging.html#"
+            "logrecord-attributes for details.",
+            "default": "%(levelname)s: %(message)s",
+            "examples": [
+                "%(levelname)s: %(message)s"
+            ],
+        },
+        "selflog_time_format": {
+            "$id": "#/properties/selflog_time_format",
+            "type": "string",
+            "title": "Format for the 'asctime' field of any self-log "
+            "messages, as a Python datetime.strftime() format string. "
+            "Invoke with --help-time-format for details.",
+            "default": "%Y-%m-%d %H:%M:%S.%f%z",
+            "examples": [
+                "%Y-%m-%d %H:%M:%S.%f%z"
+            ],
+        },
+        "forwardings": {
+            "$id": "#/properties/forwardings",
+            "type": "array",
+            "title": "List of log forwardings",
+            "default": [],
+            "items": {
+                "$id": "#/properties/forwardings/items",
+                "type": "object",
+                "required": [
+                    "name",
+                    "logs",
+                    "dest",
+                ],
+                "additionalProperties": False,
+                "properties": {
+                    "name": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/name",
+                        "type": "string",
+                        "title": "Name of the log forwarding (unique within "
+                        "a configuration).",
+                        "examples": [
+                            "Example forwarding"
+                        ],
+                    },
+                    "logs": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/logs",
+                        "type": "array",
+                        "title": "List of HMC logs to include in the log "
+                        "forwarding. Allowable values for the list items:"
+                        " - 'security': HMC Security Log."
+                        " - 'audit': HMC Audit Log.",
+                        "default": [
+                            "security",
+                            "audit"
+                        ],
+                        "items": {
+                            "$id": "#/properties/forwardings/items/"
+                            "properties/logs/items",
+                            "type": "string",
+                            "enum": [
+                                "security",
+                                "audit"
+                            ],
+                            "examples": [
+                                "security",
+                                "audit"
+                            ],
+                        }
+                    },
+                    "dest": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/dest",
+                        "type": "string",
+                        "title": "Destination of the log forwarding. "
+                        "Allowable values:"
+                        " - 'stdout': Standard output."
+                        " - 'stderr': Standard error."
+                        " - 'syslog': Local or remote system log.",
+                        "enum": [
+                            "stdout", "stderr", "syslog"
+                        ],
+                        "examples": [
+                            "stdout", "stderr", "syslog"
+                        ],
+                    },
+                    "syslog_host": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/syslog_host",
+                        "type": ["string", "null"],
+                        "title": "IP address or hostname of the syslog "
+                        "server, for syslog destinations.",
+                        "default": None,
+                        "examples": [
+                            "10.11.12.14"
+                        ],
+                    },
+                    "syslog_port": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/syslog_port",
+                        "type": "integer",
+                        "title": "Port number of the syslog server, "
+                        "for syslog destinations.",
+                        "default": 514,
+                        "examples": [
+                            514
+                        ]
+                    },
+                    "syslog_porttype": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/syslog_porttype",
+                        "type": "string",
+                        "title": "Port type of the syslog server, "
+                        "for syslog destinations.",
+                        "enum": [
+                            "tcp", "udp"
+                        ],
+                        "default": "tcp",
+                        "examples": [
+                            "tcp", "udp"
+                        ],
+                    },
+                    "syslog_facility": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/syslog_facility",
+                        "type": "string",
+                        "title": "Facility name for the syslog server, "
+                        "for syslog destinations.",
+                        "enum": [
+                            'user', 'auth', 'authpriv', 'security', 'local0',
+                            'local1', 'local2', 'local3', 'local4', 'local5',
+                            'local6', 'local7'
+                        ],
+                        "default": "user",
+                        "examples": [
+                            "user"
+                        ],
+                    },
+                    "format": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/format",
+                        "type": "string",
+                        "title": "Log message format, as a Python new-style "
+                        "format string. Invoke with --help-log-format for "
+                        "details on the fields.",
+                        "default": "{time:32} {label} {log:8} {name:12} "
+                        "{id:>4} {user:20} {msg}",
+                        "examples": [
+                            "{time:32} {label} {log:8} {name:12} {id:>4} "
+                            "{user:20} {msg}"
+                        ],
+                    },
+                    "time_format": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/time_format",
+                        "type": "string",
+                        "title": "Format for the 'time' field in the log "
+                        "message, as a Python datetime.strftime() format "
+                        "string. Invoke with --help-time-format for "
+                        "details.",
+                        "default": "%Y-%m-%d %H:%M:%S.%f%z",
+                        "examples": [
+                            "%Y-%m-%d %H:%M:%S.%f%z"
+                        ],
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+def extend_with_default(validator_class):
     """
-    Definition of a single config parameter for this script.
+    Factory function that returns a new JSON schema validator class that
+    extends the specified class by the ability to update the JSON instance
+    that is being validated, by adding the schema-defined default values for
+    any omitted properties.
 
-    They may be specified in a config file and overridden using command line
-    options. This definition represents the resulting effective configuration,
-    i.e. "required" means the parameter is required to be defined in the config
-    file or in the command line (or both).
+    Courtesy: https://python-jsonschema.readthedocs.io/en/stable/faq/
+
+    Parameters:
+
+      validator_class (jsonschema.IValidator): JSON schema validator class
+        that will be extended.
+
+    Returns:
+
+      jsonschema.IValidator: JSON schema validator class that has been
+        extended.
     """
-    type = attr.attrib(type=str)  # type in text form for including in help
-    desc = attr.attrib(type=str)  # description text for help
-    allowed = attr.attrib(type=list, default=None)  # list of allowed values
-    required = attr.attrib(type=bool, default=False)  # required or optional
-    default = attr.attrib(type=str, default=None)  # default value if optional
-    example = attr.attrib(type=object, default=None)  # example value
-    secret = attr.attrib(type=bool, default=False)  # blanked out on display
+    validate_properties = validator_class.VALIDATORS["properties"]
 
+    def set_defaults(validator, properties, instance, schema):
+        for property, subschema in properties.items():
+            if "default" in subschema:
+                instance.setdefault(property, subschema["default"])
 
-# Definition of all configuration parameters for this script.
-CONFIG_PARMS = OrderedDict()
-CONFIG_PARMS['hmc_host'] = ConfigParm(
-    type='string',
-    required=True, example='10.11.12.13',
-    desc="IP address or hostname of the HMC.")
-CONFIG_PARMS['hmc_user'] = ConfigParm(
-    type='string',
-    required=True, example='myuser',
-    desc="HMC userid.")
-CONFIG_PARMS['hmc_password'] = ConfigParm(
-    type='string',
-    required=True, example='mypassword', secret=True,
-    desc="HMC password.")
-CONFIG_PARMS['label'] = ConfigParm(
-    type='string',
-    required=False, default=None, example='myregion-myzone-myhmc',
-    desc="Label for this HMC to be used in log output (as field 'label').")
-CONFIG_PARMS['logs'] = ConfigParm(
-    type='list/tuple of string',
-    allowed=['security', 'audit'],
-    required=False, default=['security', 'audit'],
-    desc="""
-List of log types to include, with the following list item values:
-- 'security': HMC Security Log."
-- 'audit': HMC Audit Log.
-""")
-CONFIG_PARMS['since'] = ConfigParm(
-    type='string',
-    required=False, default='now',
-    desc="""
-Include past log entries since the specified date and time, or since a special
-date and time.
-Values are:
-- A date and time value suitable for dateutil.parser. Timezones are ignored
-  and the local timezone is assumed instead.
-- 'all': Include all available past log entries.
-- 'now': Include past log entries since now. This may actually include log
-  entries from recent past.
-""")
-CONFIG_PARMS['future'] = ConfigParm(
-    type='bool',
-    required=False, default=True,
-    desc="""
-Wait for future log entries. Use keyboard interrupt (e.g. Ctrl-C) to stop the
-program.
-""")
-CONFIG_PARMS['dest'] = ConfigParm(
-    type='string',
-    allowed=['stdout', 'syslog'],
-    required=False, default='stdout',
-    desc="""
-Destination for the log entries:
-- 'stdout': Standard output.
-- 'syslog': Local or remote system log.
-""")
-CONFIG_PARMS['syslog_host'] = ConfigParm(
-    type='string',
-    required=False, default=None, example='10.11.12.14',
-    desc="""
-IP address or hostname of the remote syslog server, for dest=syslog.
-""")
-CONFIG_PARMS['syslog_port'] = ConfigParm(
-    type='int',
-    required=False, default=514,
-    desc="""
-Port number of the remote syslog server, for dest=syslog.
-""")
-CONFIG_PARMS['syslog_porttype'] = ConfigParm(
-    type='string',
-    allowed=['tcp', 'udp'],
-    required=False, default='udp',
-    desc="""
-Port type of the remote syslog server, for dest=syslog.
-""")
-CONFIG_PARMS['syslog_facility'] = ConfigParm(
-    type='string',
-    allowed=['user', 'auth', 'authpriv', 'security', 'local0', 'local1',
-             'local2', 'local3', 'local4', 'local5', 'local6', 'local7'],
-    required=False, default='user',
-    desc="""
-Syslog facility name, for dest=syslog.
-""")
-CONFIG_PARMS['format'] = ConfigParm(
-    type='string',
-    required=False,
-    default='{time:32} {label} {type:8} {name:12} {id:>4} {user:20} {msg}',
-    desc="""
-Format of the output for each log entry, as a Python new-style format string.
-Invoke with --help-output-format for details on the fields.
-""")
-CONFIG_PARMS['time_format'] = ConfigParm(
-    type='string',
-    required=False,
-    default='%Y-%m-%d %H:%M:%S.%f%z',
-    desc="""
-Format for the 'time' field in the output for each log entry, as a Python
-datetime.strftime() format string.
-Invoke with --help-time-format for details.
-""")
-CONFIG_PARMS['selflog_dest'] = ConfigParm(
-    type='string',
-    allowed=['stdout', 'stderr'],
-    required=False, default='stdout',
-    desc="""
-Destination for any self-log entries:
-- 'stdout': Standard output.
-- 'stderr': Standard error.
-""")
-CONFIG_PARMS['selflog_format'] = ConfigParm(
-    type='string',
-    required=False,
-    default='%(levelname)s: %(message)s',
-    desc="""
-Format of any self-log entries, as a format string for Python logging.Formatter
-objects.
-See https://docs.python.org/2/library/logging.html#logrecord-attributes for
-details.
-""")
-CONFIG_PARMS['selflog_time_format'] = ConfigParm(
-    type='string',
-    required=False,
-    default='%Y-%m-%d %H:%M:%S.%f%z',
-    desc="""
-Format for the 'asctime' field of any self-log entries, as a Python
-datetime.strftime() format string.
-Invoke with --help-time-format for details.
-""")
+        for error in validate_properties(
+            validator, properties, instance, schema,
+        ):
+            yield error
+
+    return jsonschema.validators.extend(
+        validator_class, {"properties": set_defaults},
+    )
 
 
 class Config(object):
     """
-    The configuration for this script. It can be set from a config file and/or
-    from command line options.
-
-    The configuration parameters are attributes on an object of this class.
-    See CONFIG_PARMS for details.
+    The configuration parameters.
     """
 
     def __init__(self):
 
-        # Config parameters: dict of name to value.
-        # Parameters not specified are omitted from the dict.
-        self.parms = dict()
+        # Config file structure, as a JSON schema.
+        self._schema = CONFIG_FILE_SCHEMA
 
-        # Set defaults of optional parameters
-        for name in CONFIG_PARMS:
-            parm = CONFIG_PARMS[name]
-            if not parm.required:
-                self.parms[name] = parm.default
+        # Config parameter values, as the top level object of the configuration
+        # file (i.e. a dict).
+        # Parameters not specified in the configuration file are defaulted
+        # using the defaults from the JSON schema.
+        self._parms = None
 
     def __repr__(self):
+        parms = dict(self._parms)
+        parms['hmc_password'] = BLANKED_SECRET
+        return 'Config({!r})'.format(parms)
 
-        # Blank out secret config parms
-        parms_copy = dict(self.parms)
-        for name in self.parms:
-            parm = CONFIG_PARMS[name]
-            if parm.secret:
-                parms_copy[name] = BLANKED_SECRET
-
-        return 'Config({!r})'.format(parms_copy)
-
-    def update_from_file(self, filepath):
+    @property
+    def parms(self):
         """
-        Update the configuration from a config file in YAML.
-
-        The config file must have only the config parameters for this config
-        class. Additional parameters will cause UserError to be raised.
+        The configuration parameters, as a dictionary representing the
+        top-level object in the config file (i.e. the top-level properties
+        are items in that top-level dictionary).
         """
+        return self._parms
+
+    def load_config_file(self, filepath):
+        """
+        Load a YAML config file and set the configuration parameters of this
+        object. Omitted properties are defaulted to the defaults defined in
+        the JSON schema.
+
+        Parameters:
+
+          filepath (string): File path of the config file.
+        """
+
+        # Load config file
         try:
             with open(filepath, 'r') as fp:
-                config_dict = yaml.safe_load(fp)
+                self._parms = yaml.safe_load(fp)
         except IOError as exc:
             raise UserError(
                 "Cannot load config file {}: {}".
                 format(filepath, exc))
-        for name in config_dict:
-            value = config_dict[name]
-            if name not in CONFIG_PARMS:
-                raise UserError(
-                    "Config file {} contains an invalid config parameter: "
-                    "{} = {}".
-                    format(filepath, name, value))
-            else:
-                self.set_parm(name, value, 'config file')
 
-    def update_from_args(self, args):
-        """
-        Update the configuration from parsed command line arguments.
+        # Use a validator that adds defaults for omitted parameters
+        ValidatorWithDefaults = extend_with_default(jsonschema.Draft7Validator)
+        validator = ValidatorWithDefaults(self._schema)
 
-        The args parameter must contain the config parameters as attributes.
-        It may contain additional attributes, only those attributes that
-        are config parameters are used.
-        """
-        for name in CONFIG_PARMS:
-            if hasattr(args, name):
-                value = getattr(args, name)
-                if value is not None:
-                    self.set_parm(name, value, 'command line')
-
-    def set_parm(self, name, value, source):
-        """
-        Set a config parameter to a value.
-
-        'source' is a human readable indicator for the source of the
-        config parameter.
-        """
-        parm = CONFIG_PARMS[name]
-        if parm.allowed is not None:
-            assert not parm.secret
-            if parm.type.startswith('list'):
-                if not all(v in parm.allowed for v in value):
-                    raise UserError(
-                        "Config parameter '{}' from {} has an invalid "
-                        "value: {} (allowed is a list of any of: {}).".
-                        format(name, source, value, ', '.join(parm.allowed)))
-            else:
-                if value not in parm.allowed:
-                    raise UserError(
-                        "Config parameter '{}' from {} has an invalid "
-                        "value: {} (allowed values are: {}).".
-                        format(name, source, value, ', '.join(parm.allowed)))
-        self.parms[name] = value
-
-    def get_parm(self, name):
-        """
-        Return the value of a config parameter.
-
-        If it is required and not specified, a UserError is raised.
-        """
+        # Validate structure of loaded config parms
         try:
-            value = self.parms[name]
-        except KeyError:
-            parm = CONFIG_PARMS[name]
-            if parm.required:
-                raise UserError(
-                    "Required config parameter '{}' was not specified "
-                    "(in config file or command line).".
-                    format(name))
-        return value
-
-
-class HelpConfigAction(argparse.Action):
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        print("""
-The configuration consists of the following parameters. They can be specified
-in a config file and as optiona on the command line. Command line options
-override config file parameters.
-
-The statements below about whether a parameter is required or optional refer
-to the effective configuration after applying the config file and the command
-line options.""")
-        for name in CONFIG_PARMS:
-            parm = CONFIG_PARMS[name]
-            if parm.required:
-                required_str = \
-                    "Required."
-            else:
-                required_str = \
-                    "Optional, with default: {}". \
-                    format(parm.default)
-            if parm.example:
-                example_str = "\n  Example: {}".format(parm.example)
-            else:
-                example_str = ""
-            desc_str = parm.desc.strip(' \n') + '\n' + required_str
-            desc_str = indent(desc_str, 2)
-            print("\n* {} ({}):\n{}{}".
-                  format(name, parm.type, desc_str, example_str))
-        print("")
-        sys.exit(2)
+            validator.validate(self._parms)
+        except jsonschema.exceptions.ValidationError as exc:
+            parm_str = ''
+            for p in exc.absolute_path:
+                # Path contains list index numbers as integers
+                if isinstance(p, int):
+                    parm_str += '[{}]'.format(p)
+                else:
+                    if parm_str != '':
+                        parm_str += '.'
+                    parm_str += p
+            raise UserError(
+                "Config file {file} contains an invalid item {parm}: {msg} "
+                "(Validation details: Schema item: {schema_item}; "
+                "Failing validator: {val_name}={val_value})".
+                format(
+                    file=filepath,
+                    msg=exc.message,
+                    parm=parm_str,
+                    schema_item='.'.join(exc.absolute_schema_path),
+                    val_name=exc.validator,
+                    val_value=exc.validator_value))
 
 
 class HelpConfigFileAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-The config file is in YAML format and contains zero or more config parameters.
-
-Here is an example config file, with all supported config parameters and their
-definitions as YAML comments:
+The config file is in YAML format. Here is an example config file, with all
+supported config parameters and their descriptions:
 
 ---
-# Example {} config file
-""".format(CMD_NAME))
-        for name in CONFIG_PARMS:
-            parm = CONFIG_PARMS[name]
-            desc_str = parm.desc.strip(' \n')
-            desc_str = indent(desc_str, 1, '# ')
-            print(desc_str)
-            example_value = parm.example or parm.default
-            yaml_str = yaml.dump({name: example_value})
-            print(yaml_str)
+# Example config file
+
+# IP address or hostname of the HMC.
+hmc_host: 10.11.12.13
+
+# HMC userid.
+hmc_user: myuser
+
+# HMC password.
+hmc_password: mypassword
+
+# Label for the HMC to be used in the log message (as field 'label').
+label: myregion-myzone-myhmc
+
+# Point in time since when past log entries are included:
+# - 'now': Include past log entries since now. This may actually include log
+#   entries from the recent past.
+# - 'all': Include all available past log entries.
+# - A date and time string suitable for Python dateutil.parser. Timezones in
+#   the string are ignored and the local timezone is used instead.
+since: now
+
+# Wait for future log entries.
+future: true
+
+# Destination for any self-log entries:
+# - 'stdout': Standard output.
+# - 'stderr': Standard error.
+selflog_dest: stdout
+
+# Format of any self-log entries, as a format string for Python
+# logging.Formatter objects.
+# See https://docs.python.org/2/library/logging.html#logrecord-attributes for
+# details.
+selflog_format: '%(levelname)s: %(message)s'
+
+# Format for the 'asctime' field of any self-log entries, as a Python
+# datetime.strftime() format string.
+# Invoke with --help-time-format for details.
+selflog_time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+
+# List of log forwardings. A log forwarding mainly defines a set of logs to
+# collect, and a destination to forward them to.
+forwardings:
+
+  -
+    # Name of the forwarding (unique within configuration).
+    name: Example forwarding
+
+    # List of HMC logs to include:
+    # - 'security': HMC Security Log.
+    # - 'audit': HMC Audit Log.
+    logs: [security, audit]
+
+    # Destination:
+    # - 'stdout': Standard output.
+    # - 'syslog': Local or remote system log.
+    dest: stdout
+
+    # IP address or hostname of the syslog server (for syslog destinations).
+    syslog_host: 10.11.12.14
+
+    # Port number of the syslog server (for syslog destinations).
+    syslog_port: 514
+
+    # Port type of the syslog server (for syslog destinations).
+    syslog_porttype: udp
+
+    # Syslog facility name (for syslog destinations).
+    syslog_facility: user
+
+    # Log message format, as a Python new-style format string.
+    # Invoke with --help-log-format for details.
+    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
+
+    # Format for the 'time' field in the log message, as a Python
+    # datetime.strftime() format string.
+    # Invoke with --help-time-format for details.
+    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+""")
         sys.exit(2)
 
 
-class HelpOutputFormatAction(argparse.Action):
+class HelpLogFormatAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-The output format for each log entry is defined in the 'format' config
-parameter using a Python new-style format string, using predefined names for
-the fields of the log entry.
+The format for each log message is defined in the 'format' config parameter
+using a Python new-style format string, using predefined names for the fields
+of the log message.
 
 The fields can be arbitrarily selected and ordered in the format string, and
 the complete syntax for replacement fields in new-style format strings can be
 used to determine for example adjustment, padding or conversion.
-
-Example for use in a config file:
-
-    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
-
-Example for using a command line option:
-
-    --format '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
-
-The format string shown in the examples is also the default.
 
 Supported fields:
 
@@ -424,7 +568,7 @@ Supported fields:
 * label: The label for the HMC that was specified in the 'label' config
   parameter.
 
-* log: The HMC log to which this log entry belongs: Security, Audit.
+* log: The HMC log to which this log entry belongs: security, audit.
 
 * name: The name of the log entry if it has one, or the empty string otherwise.
 
@@ -451,6 +595,10 @@ Supported fields:
   in field 'detail_msgs', where each item is a list of substitution variables
   used in the corresponding detail log message. Each item in that inner list
   is a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+
+Example:
+
+    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
 """)
         sys.exit(2)
 
@@ -459,8 +607,8 @@ class HelpTimeFormatAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-The format for the 'time' field in the output for each log entry is defined in
-the 'time_format' config parameter using a Python datetime.strftime() format
+The format for the 'time' field in the output for each log message is defined
+in the 'time_format' config parameter using a Python datetime.strftime() format
 string, or alternatively some keywords:
 
 - iso8601: ISO 8601 format with 'T' as delimiter,
@@ -469,17 +617,9 @@ string, or alternatively some keywords:
   e.g. 2019-08-09 12:46:38.550000+02:00
 - Any other value is interpreted as datetime.strftime() format string.
 
-Example for use in a config file:
-
-    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
-
-Example for using a command line option:
-
-    --time_format '%Y-%m-%d %H:%M:%S.%f%z'
-
-The format for the 'asctime' field in any self-log messages is defined in the
-'selflog_time_format' config parameter also using a Python datetime.strftime()
-format string.
+The format for the 'asctime' field in any self-logged messages is defined in
+the 'selflog_time_format' config parameter also using a Python
+datetime.strftime() format string.
 
 The syntax for datetime.strftime() format strings is described here:
 https://docs.python.org/2/library/datetime.html#strftime-and-strptime-behavior
@@ -488,6 +628,11 @@ The datetime objects used for these time stamps are timezone-aware, using the
 local timezone of the system on which this program runs. Any locale-specific
 components in the datetime.strftime() format string are created using the
 locale of the system on which this program runs (e.g. the name of weekdays).
+
+Examples:
+
+    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+    time_format: iso8601   # only for 'time' field of log messages
 """)
         sys.exit(2)
 
@@ -504,14 +649,13 @@ def parse_args():
     parser = argparse.ArgumentParser(
         add_help=False,
         description="A log forwarder for the IBM Z HMC. "
-        "The log entries can be selected based on log (security / audit) and "
-        "time range, and will be sent to a destination such as stdout, "
-        "or the local or remote system log (used for QRadar). "
+        "The log entries can be selected based on HMC log (security / audit) "
+        "and time range, and will be sent to one or more destinations such "
+        "as stdout, or a syslog server (used for QRadar). "
         "It is possible to wait in a loop for future log entries to be "
         "created.",
         usage="{} [options]".format(CMD_NAME),
-        epilog="Invoke with --help-config to see the optionality and defaults "
-        "for config parameters.")
+        epilog=None)
 
     general_opts = parser.add_argument_group('General options')
     general_opts.add_argument(
@@ -519,22 +663,17 @@ def parse_args():
         action='help', default=argparse.SUPPRESS,
         help="Show this help message and exit.")
     general_opts.add_argument(
-        '--help-config',
-        action=HelpConfigAction, nargs=0,
-        help="Show a help message about the config parameters (including "
-        "optionality and defaults) and exit.")
-    general_opts.add_argument(
         '--help-config-file',
         action=HelpConfigFileAction, nargs=0,
-        help="Show a help message about the config file format and exit.")
+        help="Show help about the config file format and exit.")
     general_opts.add_argument(
-        '--help-output-format',
-        action=HelpOutputFormatAction, nargs=0,
-        help="Show a help message about the output formatting and exit.")
+        '--help-log-format',
+        action=HelpLogFormatAction, nargs=0,
+        help="Show help about the log message formatting and exit.")
     general_opts.add_argument(
         '--help-time-format',
         action=HelpTimeFormatAction, nargs=0,
-        help="Show a help message about the time field formatting and exit.")
+        help="Show help about the time field formatting and exit.")
     general_opts.add_argument(
         '--version',
         action='version', version='{} {}'.format(CMD_NAME, __version__),
@@ -542,96 +681,14 @@ def parse_args():
     general_opts.add_argument(
         '--debug',
         dest='debug', action='store_true',
-        help="Show debug self-log messages (if any).")
+        help="Show debug self-logged messages (if any).")
 
-    # Note: Because the optionality and default values are defined in the
-    # CONFIG_PARMS variable, the argument definitions here must all define
-    # required=False, default=None (both being default for add_argument(),
-    # except for store_true/false actions).
     config_opts = parser.add_argument_group('Config options')
     config_opts.add_argument(
         '-c', '--config-file', metavar="CONFIGFILE",
+        required=True,
         dest='config_file', action='store',
-        help="File path of the config file to use. Default: No config file.")
-    config_opts.add_argument(
-        "--hmc_host",
-        dest='hmc_host', metavar='HOST', action='store',
-        help="{}\nOverrides the 'hmc_host' parameter from the config file.".
-        format(CONFIG_PARMS['hmc_host'].desc))
-    config_opts.add_argument(
-        "--hmc_user",
-        dest='hmc_user', metavar='USER', action='store',
-        help="{}\nOverrides the 'hmc_user' parameter from the config file.".
-        format(CONFIG_PARMS['hmc_user'].desc))
-    config_opts.add_argument(
-        "--hmc_password",
-        dest='hmc_password', metavar='PASSWORD', action='store',
-        help="{}\nOverrides the 'hmc_password' parameter from the config "
-        "file.".
-        format(CONFIG_PARMS['hmc_password'].desc))
-    config_opts.add_argument(
-        "--label",
-        dest='label', metavar='LABEL', action='store',
-        help="{}\nOverrides the 'label' parameter from the config file.".
-        format(CONFIG_PARMS['label'].desc))
-    config_opts.add_argument(
-        '--log',
-        dest='logs', metavar='LOG', action='append',
-        help="{}\nEach occurrence adds a log. Overrides the 'logs' parameter "
-        "from the config file.".
-        format(CONFIG_PARMS['logs'].desc))
-    config_opts.add_argument(
-        '--since',
-        dest='since', metavar='SINCE', action='store',
-        help="{}\nOverrides the 'since' parameter from the config file.".
-        format(CONFIG_PARMS['since'].desc))
-    config_opts.add_argument(
-        '--future',
-        dest='future', action='store_true', default=None,
-        help="{}\nOverrides the 'future' parameter from the config file.".
-        format(CONFIG_PARMS['future'].desc))
-    config_opts.add_argument(
-        '--no-future',
-        dest='future', action='store_false', default=None,
-        help="Do not wait for future log entries.\n"
-        "Overrides the 'future' parameter from the config file.")
-    config_opts.add_argument(
-        '--dest',
-        dest='dest', metavar='DEST', action='store',
-        help="{}\nOverrides the 'dest' parameter from the config file.".
-        format(CONFIG_PARMS['dest'].desc))
-    config_opts.add_argument(
-        '--syslog_host',
-        dest='syslog_host', metavar='HOST', action='store',
-        help="{}\nOverrides the 'syslog_host' parameter from the config file.".
-        format(CONFIG_PARMS['syslog_host'].desc))
-    config_opts.add_argument(
-        '--syslog_port',
-        dest='syslog_port', metavar='PORT', action='store',
-        help="{}\nOverrides the 'syslog_port' parameter from the config file.".
-        format(CONFIG_PARMS['syslog_port'].desc))
-    config_opts.add_argument(
-        '--syslog_porttype',
-        dest='syslog_porttype', metavar='PORTTYPE', action='store',
-        help="{}\nOverrides the 'syslog_porttype' parameter from the config "
-        "file.".
-        format(CONFIG_PARMS['syslog_porttype'].desc))
-    config_opts.add_argument(
-        '--syslog_facility',
-        dest='syslog_facility', metavar='FACILITY', action='store',
-        help="{}\nOverrides the 'syslog_facility' parameter from the config "
-        "file.".
-        format(CONFIG_PARMS['syslog_facility'].desc))
-    config_opts.add_argument(
-        '--format',
-        dest='format', action='store',
-        help="{}\nOverrides the 'format' parameter from the config file.".
-        format(CONFIG_PARMS['format'].desc))
-    config_opts.add_argument(
-        '--time_format',
-        dest='time_format', action='store',
-        help="{}\nOverrides the 'time_format' parameter from the config file.".
-        format(CONFIG_PARMS['time_format'].desc))
+        help="File path of the config file to use.")
 
     args = parser.parse_args()
     return args
@@ -645,7 +702,7 @@ class LogEntry(object):
     """
     time = attr.attrib(type=datetime)  # Time stamp as datetime object
     label = attr.attrib(type=str)  # HMC label
-    log = attr.attrib(type=str)  # HMC log (Security, Audit)
+    log = attr.attrib(type=str)  # HMC log (security, audit)
     name = attr.attrib(type=str)  # Name of the log entry
     id = attr.attrib(type=int)  # ID of the log entry
     user = attr.attrib(type=str)  # HMC userid associated with log entry
@@ -657,26 +714,30 @@ class LogEntry(object):
 
 class OutputHandler(object):
     """
-    Handle the outputting of any log entries to the defined destination.
+    Handle the outputting of log messages for a single log forwarding.
     """
 
-    def __init__(self, config):
+    def __init__(self, config_parms, fwd_parms):
         """
         Parameters:
 
-          config (Config): The configuration for the program.
+          config_parms (dict): Configuration parameters, overall.
+
+          fwd_parms (dict): Configuration parameters for the forwarding.
         """
-        self.config = config
+        self.config_parms = config_parms
+        self.fwd_parms = fwd_parms
+
         self.logger = None
+
         label_hdr = 'Label'
-        label = self.config.get_parm('label') or ''
+        label = self.config_parms['label']
         self.label_len = max(len(label_hdr), len(label))
         self.label_hdr = label_hdr.ljust(self.label_len)
         self.label = label.ljust(self.label_len)
-        self.time_format = self.config.get_parm('time_format')
 
         # Check validity of the format string:
-        format = self.config.get_parm('format')
+        format = self.fwd_parms['format']
         try:
             format.format(
                 time='test', label='test', log='test', name='test', id='test',
@@ -686,8 +747,9 @@ class OutputHandler(object):
             # KeyError is raised when the format string contains a named
             # placeholder that is not provided in format().
             raise UserError(
-                "Config parameter 'format' specifies an invalid field: {}".
-                format(str(exc)))
+                "Config parameter 'format' in forwarding '{name}' specifies "
+                "an invalid field: {msg}".
+                format(name=self.fwd_parms['name'], msg=str(exc)))
 
         # Check validity of the time_format string:
         dt = datetime.now()
@@ -699,32 +761,34 @@ class OutputHandler(object):
                 format(str(exc)))
 
     def formatted_time(self, dt):
-        if self.time_format == 'iso8601':
+        time_format = self.fwd_parms['time_format']
+        if time_format == 'iso8601':
             return dt.isoformat()
-        if self.time_format == 'iso8601b':
+        if time_format == 'iso8601b':
             return dt.isoformat(' ')
-        return dt.strftime(self.time_format)  # already checked in __init__()
+        return dt.strftime(time_format)  # already checked in __init__()
 
     def output_begin(self):
-        dest = self.config.get_parm('dest')
-        format = self.config.get_parm('format')
-        if dest == 'stdout':
+        dest = self.fwd_parms['dest']
+        format = self.fwd_parms['format']
+        if dest in ('stdout', 'stderr'):
+            dest_stream = getattr(sys, dest)
             out_str = format.format(
                 time='Time', label=self.label_hdr, log='Log', name='Name',
                 id='ID', user='Userid', msg='Message',
                 msg_vars='Message variables', detail_msgs='Detail messages',
                 detail_msgs_vars='Detail messages variables')
-            print(out_str)
-            print("-" * 120)
-            sys.stdout.flush()
+            print(out_str, file=dest_stream)
+            print("-" * 120, file=dest_stream)
+            dest_stream.flush()
         else:
             assert dest == 'syslog'
-            self.syslog_host = self.config.get_parm('syslog_host')
-            self.syslog_port = self.config.get_parm('syslog_port')
-            self.syslog_facility = self.config.get_parm('syslog_facility')
+            self.syslog_host = self.fwd_parms['syslog_host']
+            self.syslog_port = self.fwd_parms['syslog_port']
+            self.syslog_facility = self.fwd_parms['syslog_facility']
             assert self.syslog_facility in SysLogHandler.facility_names
             facility_code = SysLogHandler.facility_names[self.syslog_facility]
-            self.syslog_porttype = self.config.get_parm('syslog_porttype')
+            self.syslog_porttype = self.fwd_parms['syslog_porttype']
             if self.syslog_porttype == 'tcp':
                 # Newer syslog protocols, e.g. rsyslog
                 socktype = socket.SOCK_STREAM
@@ -748,10 +812,11 @@ class OutputHandler(object):
             self.logger.setLevel(logging.INFO)
 
     def output_end(self):
-        dest = self.config.get_parm('dest')
-        if dest == 'stdout':
-            print("-" * 120)
-            sys.stdout.flush()
+        dest = self.fwd_parms['dest']
+        if dest in ('stdout', 'stderr'):
+            dest_stream = getattr(sys, dest)
+            print("-" * 120, file=dest_stream)
+            dest_stream.flush()
         else:
             assert dest == 'syslog'
             pass  # nothing to do
@@ -759,10 +824,12 @@ class OutputHandler(object):
     def output_entries(self, log_entries):
         table = list()
         for le in log_entries:
+            le_log = le['log-type']
+            if le_log not in self.fwd_parms['logs']:
+                continue
             hmc_time = le['event-time']
             le_time = zhmcclient.datetime_from_timestamp(
-                hmc_time, tz.tzlocal())
-            le_log = le['log-type']
+                hmc_time, dateutil_tz.tzlocal())
             le_name = le['event-name']
             le_id = le['event-id']
             le_user = le['userid'] or ''
@@ -781,9 +848,10 @@ class OutputHandler(object):
                 detail_msgs_vars=le_detail_msgs_vars)
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
-        dest = self.config.get_parm('dest')
-        format = self.config.get_parm('format')
-        if dest == 'stdout':
+        dest = self.fwd_parms['dest']
+        format = self.fwd_parms['format']
+        if dest in ('stdout', 'stderr'):
+            dest_stream = getattr(sys, dest)
             for row in sorted_table:
                 out_str = format.format(
                     time=self.formatted_time(row.time), label=row.label,
@@ -791,8 +859,8 @@ class OutputHandler(object):
                     msg=row.msg, msg_vars=row.msg_vars,
                     detail_msgs=row.detail_msgs,
                     detail_msgs_vars=row.detail_msgs_vars)
-                print(out_str)
-            sys.stdout.flush()
+                print(out_str, file=dest_stream)
+                dest_stream.flush()
         else:
             assert dest == 'syslog'
             for row in sorted_table:
@@ -835,7 +903,7 @@ class DatetimeFormatter(logging.Formatter):
             time_value += float(record.msecs) / 1000
         dt = datetime.fromtimestamp(time_value)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=tz.tzlocal())
+            dt = dt.replace(tzinfo=dateutil_tz.tzlocal())
         if datefmt:
             s = dt.strftime(datefmt)
         else:
@@ -855,17 +923,27 @@ class SelfLogger(object):
     configured.
     """
 
-    def __init__(self, config, debug):
+    def __init__(self, dest, format, time_format, debug):
         """
         Parameters:
 
-          config (Config): The configuration for the program.
+          dest (string): The name of the self-logging destination, as a string
+            ('stdout', 'stderr').
 
-          debug (bool): Show debug self-log messages. This causes causes the
+          format (string): The format string for self-logging, using Python
+            logging.Formatter string format.
+
+          time_format (string): The format string for the 'asctime' field
+            in the format string, using datetime.strftime() format.
+
+          debug (bool): Show debug self-logged messages. This causes causes the
             log level to be increased from INFO to DEBUG.
         """
-        self._config = config
+        self._dest = dest
+        self._format = format
+        self._time_format = time_format
         self._debug = debug
+
         self._logger = None  # Lazy initialization
 
     def _setup(self):
@@ -873,16 +951,14 @@ class SelfLogger(object):
         Set up the logger, if not yet set up.
         """
         if self._logger is None:
-            dest_str = self._config.get_parm('selflog_dest')
-            if dest_str == 'stdout':
-                dest = sys.stdout
+            formatter = DatetimeFormatter(
+                fmt=self._format, datefmt=self._time_format)
+            if self._dest == 'stdout':
+                dest_stream = sys.stdout
             else:
-                assert dest_str == 'stderr'
-                dest = sys.stderr
-            format = self._config.get_parm('selflog_format')
-            time_format = self._config.get_parm('selflog_time_format')
-            formatter = DatetimeFormatter(fmt=format, datefmt=time_format)
-            handler = StreamHandler(dest)
+                assert self._dest == 'stderr'
+                dest_stream = sys.stderr
+            handler = StreamHandler(dest_stream)
             handler.setFormatter(formatter)
             self._logger = logging.getLogger(SELF_LOGGER_NAME)
             self._logger.addHandler(handler)
@@ -915,75 +991,77 @@ def get_log_entries(logs, console, begin_time, end_time):
     if 'audit' in logs:
         audit_entries = console.get_audit_log(begin_time, end_time)
         for e in audit_entries:
-            e['log-type'] = 'Audit'
+            e['log-type'] = 'audit'
         log_entries += audit_entries
     if 'security' in logs:
         security_entries = console.get_security_log(begin_time, end_time)
         for e in security_entries:
-            e['log-type'] = 'Security'
+            e['log-type'] = 'security'
         log_entries += security_entries
     return log_entries
 
 
 def main():
     """
-    Main routine of the script.
+    Main routine of the program.
     """
 
     requests.packages.urllib3.disable_warnings()  # Used by zhmcclient
+
+    # Initial self-logger, using defaults.
+    # This is needed for errors during config processing.
+    top_schema_props = CONFIG_FILE_SCHEMA['properties']
+    SELF_LOGGER = SelfLogger(
+        dest=top_schema_props['selflog_dest']['default'],
+        format=top_schema_props['selflog_format']['default'],
+        time_format=top_schema_props['selflog_time_format']['default'],
+        debug=False)
 
     try:  # transform any of our exceptions to an error exit
 
         args = parse_args()
 
         config = Config()
-        if args.config_file:
-            config.update_from_file(args.config_file)
-        config.update_from_args(args)
+        config.load_config_file(args.config_file)
 
-        SELF_LOGGER = SelfLogger(config, args.debug)
+        # Final self-logger, using configuration parameters.
+        SELF_LOGGER = SelfLogger(
+            dest=config.parms['selflog_dest'],
+            format=config.parms['selflog_format'],
+            time_format=config.parms['selflog_time_format'],
+            debug=args.debug)
 
-        hmc = config.get_parm('hmc_host')
-        userid = config.get_parm('hmc_user')
-        password = config.get_parm('hmc_password')
-        label = config.get_parm('label')
-        dest = config.get_parm('dest')
-        logs = config.get_parm('logs')
-        since = config.get_parm('since')
-        future = config.get_parm('future')
-        syslog_host = config.get_parm('syslog_host')
-        syslog_port = config.get_parm('syslog_port')
-        syslog_porttype = config.get_parm('syslog_porttype')
-        syslog_facility = config.get_parm('syslog_facility')
+        # SELF_LOGGER.debug("Effective config with defaults: {!r}".
+        #                   format(config))
+
+        hmc = config.parms['hmc_host']
+        userid = config.parms['hmc_user']
+        password = config.parms['hmc_password']
+        label = config.parms['label']
+        since = config.parms['since']
+        future = config.parms['future']
 
         if since == 'all':
             begin_time = None
             since_str = 'all'
         elif since == 'now':
-            begin_time = datetime.now(tz.tzlocal())
+            begin_time = datetime.now(dateutil_tz.tzlocal())
             since_str = 'now ({})'.format(begin_time)
         else:
             assert since is not None
             try:
-                begin_time = parser.parse(since)
-                # TODO: Pass tzinfos arg; by default, only UTC is supported.
+                begin_time = dateutil_parser.parse(since)
+                # TODO: Pass tzinfos arg to get timezones parsed. Without that,
+                # only UTC is parsed, and anything else will lead to no tzinfo.
                 if begin_time.tzinfo is None:
-                    begin_time = begin_time.replace(tzinfo=tz.tzlocal())
+                    begin_time = begin_time.replace(
+                        tzinfo=dateutil_tz.tzlocal())
                 since_str = '{}'.format(begin_time)
             except (ValueError, OverflowError) as exc:
                 raise UserError(
                     "Config parameter 'since' has an invalid date & time "
                     "value: {}".
                     format(args.since))
-
-        out_handler = OutputHandler(config)  # Checks validity of format
-        if dest == 'stdout':
-            dest_str = dest
-        else:
-            assert dest == 'syslog'
-            dest_str = "{} (server {}, port {}/{}, facility {})". \
-                format(dest, syslog_host, syslog_port, syslog_porttype,
-                       syslog_facility)
 
         SELF_LOGGER.info(
             "{} starting".format(CMD_NAME))
@@ -993,11 +1071,42 @@ def main():
             "HMC: {host}, Userid: {user}, Label: {label}".
             format(host=hmc, user=userid, label=label))
         SELF_LOGGER.info(
-            "Logs: {logs}, Since: {since}, Future: {future}".
-            format(logs=', '.join(logs), since=since_str, future=future))
+            "Since: {since}, Future: {future}".
+            format(since=since_str, future=future))
+
+        out_handlers = []
+        all_logs = set()
+        for fwd_parms in config.parms['forwardings']:
+
+            name = fwd_parms['name']
+            logs = fwd_parms['logs']
+            dest = fwd_parms['dest']
+            syslog_host = fwd_parms['syslog_host']
+            syslog_port = fwd_parms['syslog_port']
+            syslog_porttype = fwd_parms['syslog_porttype']
+            syslog_facility = fwd_parms['syslog_facility']
+
+            if dest in ('stdout', 'stderr'):
+                dest_str = dest
+            else:
+                assert dest == 'syslog'
+                dest_str = "{} (server {}, port {}/{}, facility {})". \
+                    format(dest, syslog_host, syslog_port, syslog_porttype,
+                           syslog_facility)
+
+            SELF_LOGGER.info(
+                "Forwarding: '{name}'; Logs: {logs}; Destination: {dest}".
+                format(name=name, logs=', '.join(logs), dest=dest_str))
+
+            out_handler = OutputHandler(config.parms, fwd_parms)
+            out_handlers.append(out_handler)
+
+            for log in logs:
+                all_logs.add(log)
+
         SELF_LOGGER.info(
-            "Destination: {dest}".
-            format(dest=dest_str))
+            "Collecting these logs altogether: {logs}".
+            format(logs=', '.join(all_logs)))
 
         try:  # make sure the session gets logged off
 
@@ -1005,11 +1114,13 @@ def main():
             client = zhmcclient.Client(session)
             console = client.consoles.console
 
-            out_handler.output_begin()
+            for hdlr in out_handlers:
+                hdlr.output_begin()
 
             log_entries = get_log_entries(
-                logs, console, begin_time=begin_time, end_time=None)
-            out_handler.output_entries(log_entries)
+                all_logs, console, begin_time=begin_time, end_time=None)
+            for hdlr in out_handlers:
+                hdlr.output_entries(log_entries)
 
             if future:
                 topic_items = session.get_notification_topics()
@@ -1019,11 +1130,11 @@ def main():
                 for topic_item in topic_items:
                     topic_type = topic_item['topic-type']
                     if topic_type == 'security-notification' \
-                            and 'security' in logs:
+                            and 'security' in all_logs:
                         security_topic_name = topic_item['topic-name']
                         topic_names.append(security_topic_name)
                     if topic_type == 'audit-notification' \
-                            and 'audit' in logs:
+                            and 'audit' in all_logs:
                         audit_topic_name = topic_item['topic-name']
                         topic_names.append(audit_topic_name)
                 if topic_names:
@@ -1040,13 +1151,15 @@ def main():
                                     if topic_name == security_topic_name:
                                         log_entries = message['log-entries']
                                         for le in log_entries:
-                                            le['log-type'] = 'Security'
-                                        out_handler.output_entries(log_entries)
+                                            le['log-type'] = 'security'
+                                        for hdlr in out_handlers:
+                                            hdlr.output_entries(log_entries)
                                     elif topic_name == audit_topic_name:
                                         log_entries = message['log-entries']
                                         for le in log_entries:
-                                            le['log-type'] = 'Audit'
-                                        out_handler.output_entries(log_entries)
+                                            le['log-type'] = 'audit'
+                                        for hdlr in out_handlers:
+                                            hdlr.output_entries(log_entries)
                                     else:
                                         SELF_LOGGER.warning(
                                             "Ignoring invalid topic name: {}".
