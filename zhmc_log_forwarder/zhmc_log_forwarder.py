@@ -519,6 +519,7 @@ forwardings:
 
     # Destination:
     # - 'stdout': Standard output.
+    # - 'stderr': Standard error.
     # - 'syslog': Local or remote system log.
     dest: stdout
 
