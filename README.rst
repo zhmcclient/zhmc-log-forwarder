@@ -68,16 +68,16 @@ Installation
 Because this package is not on Pypi yet, it needs to be installed directly from
 its Git repo, e.g. as follows:
 
-.. code-block:: bash
+.. code-block:: text
 
-    $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@{version}#egg=zhmc-log-forwarder
+    $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@VERSION#egg=zhmc-log-forwarder
 
-where ``{version}`` is the desired package version, e.g. ``0.6.0``, or a branch
-such as ``master``.
+where ``VERSION`` is the package version (e.g. ``0.6.0``) or the branch
+(e.g. ``master``) to install.
 
 Note that for dependent packages, this approach does not take into account any
 version constraints specified in requirements.txt, but because there are no
-version pinnings currently, this still works fine.
+version pinnings currently, this approach works fine.
 
 ..  $ pip install zhmc-log-forwarder
 
@@ -96,13 +96,15 @@ Quickstart
 
     .. code-block:: text
 
-        zhmc_log_forwarder --help-config-file
+        $ zhmc_log_forwarder --help-config-file
 
-2.  Start the program with that config file:
+2.  Start the program as follows:
 
     .. code-block:: text
 
-        zhmc_log_forwarder -c CONFIGFILE
+        $ zhmc_log_forwarder -c CONFIGFILE
+
+    Where ``CONFIGFILE`` is the file path of the created config file.
 
 .. Documentation
 .. =============
