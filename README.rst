@@ -65,6 +65,9 @@ A short overview presentation is here: `IBM_Z_HMC_Log_Forwarder.pdf`_.
 Installation
 ============
 
+Because this package is not on Pypi yet, it needs to be installed directly from
+its Git repo, e.g. as follows:
+
 .. code-block:: bash
 
     $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@{version}#egg=zhmc-log-forwarder
@@ -72,11 +75,15 @@ Installation
 where ``{version}`` is the desired package version, e.g. ``0.6.0``, or a branch
 such as ``master``.
 
+Note that for dependent packages, this approach does not take into account any
+version constraints specified in requirements.txt, but because there are no
+version pinnings currently, this still works fine.
+
 ..  $ pip install zhmc-log-forwarder
 
 .. For more details, see the `Installation section`_ in the documentation.
 
-.. _Installation section: http://zhmc-log-forwarder.readthedocs.io/en/stable/intro.html#installation
+.. .. _Installation section: http://zhmc-log-forwarder.readthedocs.io/en/stable/intro.html#installation
 
 Quickstart
 ==========
@@ -105,8 +112,8 @@ Quickstart
 .. * `Documentation for latest version on Pypi`_
 .. * `Documentation for master branch in Git repo`_
 
-.. _Documentation for latest version on Pypi: http://zhmc-log-forwarder.readthedocs.io/en/stable/
-.. _Documentation for master branch in Git repo: http://zhmc-log-forwarder.readthedocs.io/en/latest/
+.. .. _Documentation for latest version on Pypi: http://zhmc-log-forwarder.readthedocs.io/en/stable/
+.. .. _Documentation for master branch in Git repo: http://zhmc-log-forwarder.readthedocs.io/en/latest/
 
 .. Contributing
 .. ============
@@ -114,7 +121,7 @@ Quickstart
 .. For information on how to contribute to this project, see the
 .. `Development section`_ in the documentation.
 
-.. _Development section: http://zhmc-log-forwarder.readthedocs.io/en/stable/development.html
+.. .. _Development section: http://zhmc-log-forwarder.readthedocs.io/en/stable/development.html
 
 License
 =======
