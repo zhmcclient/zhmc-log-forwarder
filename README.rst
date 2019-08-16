@@ -69,8 +69,8 @@ Installation
 
     $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@{version}#egg=zhmc-log-forwarder
 
-where `{version}` is the desired package version, e.g. `0.6.0`, or a branch
-such as `master`.
+where ``{version}`` is the desired package version, e.g. ``0.6.0``, or a branch
+such as ``master``.
 
 ..  $ pip install zhmc-log-forwarder
 
