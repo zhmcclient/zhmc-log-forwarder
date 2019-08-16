@@ -67,9 +67,14 @@ Installation
 
 .. code-block:: bash
 
-    $ pip install zhmc-log-forwarder
+    $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@{version}#egg=zhmc-log-forwarder
 
-For more details, see the `Installation section`_ in the documentation.
+where `{version}` is the desired package version, e.g. `0.6.0`, or a branch
+such as `master`.
+
+..  $ pip install zhmc-log-forwarder
+
+.. For more details, see the `Installation section`_ in the documentation.
 
 .. _Installation section: http://zhmc-log-forwarder.readthedocs.io/en/stable/intro.html#installation
 
@@ -79,34 +84,35 @@ Quickstart
 1.  Create a zhmc_log_forwarder config file, that specifies the targeted HMC,
     desired destination for the logs, and other data.
 
-    An example config file is shown when invoking:
+    An example config file with explanations of the parameters is shown when
+    invoking:
 
     .. code-block:: text
 
         zhmc_log_forwarder --help-config-file
 
-2.  Start the program:
+2.  Start the program with that config file:
 
     .. code-block:: text
 
         zhmc_log_forwarder -c CONFIGFILE
 
-Documentation
-=============
+.. Documentation
+.. =============
 
-The zhmc-log-forwarder documentation is on RTD:
+.. The zhmc-log-forwarder documentation is on RTD:
 
-* `Documentation for latest version on Pypi`_
-* `Documentation for master branch in Git repo`_
+.. * `Documentation for latest version on Pypi`_
+.. * `Documentation for master branch in Git repo`_
 
 .. _Documentation for latest version on Pypi: http://zhmc-log-forwarder.readthedocs.io/en/stable/
 .. _Documentation for master branch in Git repo: http://zhmc-log-forwarder.readthedocs.io/en/latest/
 
-Contributing
-============
+.. Contributing
+.. ============
 
-For information on how to contribute to this project, see the
-`Development section`_ in the documentation.
+.. For information on how to contribute to this project, see the
+.. `Development section`_ in the documentation.
 
 .. _Development section: http://zhmc-log-forwarder.readthedocs.io/en/stable/development.html
 
