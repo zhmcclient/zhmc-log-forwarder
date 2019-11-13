@@ -65,19 +65,26 @@ A short overview presentation is here: `IBM_Z_HMC_Log_Forwarder.pdf`_.
 Installation
 ============
 
-Because this package is not on Pypi yet, it needs to be installed directly from
-its Git repo, e.g. as follows:
+Because the zhmc_log_forwarder package is not on Pypi yet, it needs to be
+installed directly from its Git repo:
 
 .. code-block:: text
 
     $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@VERSION#egg=zhmc-log-forwarder
 
-where ``VERSION`` is the package version (e.g. ``0.6.0``) or the branch
-(e.g. ``master``) to install.
+where ``VERSION`` needs to be replaced with the package version or branch name
+you want to install. For example, to install the version from the ``master``
+branch, issue:
 
-Note that for dependent packages, this approach does not take into account any
-version constraints specified in requirements.txt, but because there are no
-version pinnings currently, this approach works fine.
+.. code-block:: text
+
+    $ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@master#egg=zhmc-log-forwarder
+
+This will install the package and all of its prerequisite packages into your
+current Python environment.
+
+It is recommended to use a virtual Python environment, in order not to clutter
+up your system Python.
 
 ..  $ pip install zhmc-log-forwarder
 
@@ -88,8 +95,12 @@ version pinnings currently, this approach works fine.
 Quickstart
 ==========
 
-1.  Create a zhmc_log_forwarder config file, that specifies the targeted HMC,
-    desired destination for the logs, and other data.
+1.  Make sure you installed the zhmc_log_forwarder package (see the previous
+    section).
+
+2.  Create a config file for the ``zhmc_log_forwarder`` command. The config
+    file specifies the targeted HMC, the desired destination for the logs, and
+    other data.
 
     An example config file with explanations of the parameters is shown when
     invoking:
@@ -98,13 +109,21 @@ Quickstart
 
         $ zhmc_log_forwarder --help-config-file
 
-2.  Start the program as follows:
+    Redirect that output into a file and edit that file as needed.
+
+3.  Start the ``zhmc_log_forwarder`` command as follows:
 
     .. code-block:: text
 
         $ zhmc_log_forwarder -c CONFIGFILE
 
     Where ``CONFIGFILE`` is the file path of the created config file.
+
+    The command will run forever (or until stopped with Ctrl-C) and will
+    forward the log records as specified in the config file.
+
+Note that neither installation nor usage of the ``zhmc_log_forwarder`` command
+requires cloning this Github repo or being in a specific directory.
 
 .. Documentation
 .. =============
