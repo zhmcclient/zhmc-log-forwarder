@@ -71,9 +71,14 @@ forwardings:
     # Syslog facility name (for syslog destinations).
     syslog_facility: user
 
-    # Log message format, as a Python new-style format string.
-    # Invoke with --help-log-format for details.
-    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
+    # Output format of the log records written to the destination:
+    # - 'line': Single line formatted using the line_format config parameter
+    # - 'cadf': CADF format as a JSON string
+    format: line
+
+    # Format for 'line' output format, as a Python new-style format string.
+    # Invoke with --help-format-line for details.
+    line_format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
 
     # Format for the 'time' field in the log message, as a Python
     # datetime.strftime() format string.

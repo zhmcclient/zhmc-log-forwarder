@@ -309,8 +309,23 @@ CONFIG_FILE_SCHEMA = {
                         "$id": "#/properties/forwardings/items/"
                         "properties/format",
                         "type": "string",
-                        "title": "Log message format, as a Python new-style "
-                        "format string. Invoke with --help-log-format for "
+                        "title": "Output format for the log records. "
+                        "Invoke with --help-format for details.",
+                        "enum": [
+                            'line', 'cadf'
+                        ],
+                        "default": "line",
+                        "examples": [
+                            "line"
+                        ],
+                    },
+                    "line_format": {
+                        "$id": "#/properties/forwardings/items/"
+                        "properties/line_format",
+                        "type": "string",
+                        "title": "Message format for 'line' output format, "
+                        "as a Python new-style format string. "
+                        "Invoke with --help-format-line for "
                         "details on the fields.",
                         "default": "{time:32} {label} {log:8} {name:12} "
                         "{id:>4} {user:20} {msg}",
@@ -323,10 +338,10 @@ CONFIG_FILE_SCHEMA = {
                         "$id": "#/properties/forwardings/items/"
                         "properties/time_format",
                         "type": "string",
-                        "title": "Format for the 'time' field in the log "
-                        "message, as a Python datetime.strftime() format "
-                        "string. Invoke with --help-time-format for "
-                        "details.",
+                        "title": "Format for any time fields in the log "
+                        "records (for all output formats), as a Python "
+                        "datetime.strftime() format string. "
+                        "Invoke with --help-time-format for details.",
                         "default": "%Y-%m-%d %H:%M:%S.%f%z",
                         "examples": [
                             "%Y-%m-%d %H:%M:%S.%f%z"
@@ -535,9 +550,14 @@ forwardings:
     # Syslog facility name (for syslog destinations).
     syslog_facility: user
 
-    # Log message format, as a Python new-style format string.
-    # Invoke with --help-log-format for details.
-    format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
+    # Output format of the log records written to the destination:
+    # - 'line': Single line formatted using the line_format config parameter
+    # - 'cadf': CADF format as a JSON string
+    format: line
+
+    # Format for 'line' output format, as a Python new-style format string.
+    # Invoke with --help-format-line for details.
+    line_format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
 
     # Format for the 'time' field in the log message, as a Python
     # datetime.strftime() format string.
@@ -547,13 +567,32 @@ forwardings:
         sys.exit(2)
 
 
-class HelpLogFormatAction(argparse.Action):
+class HelpFormatAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-The format for each log message is defined in the 'format' config parameter
-using a Python new-style format string, using predefined names for the fields
-of the log message.
+The format for each log record that is sent to the destination is defined in
+the 'format' parameter in the config file, using these choices:
+
+    line  - Single line for each record, using the format defined in the
+            'line_format' parameter in the config file.
+            Invoke with --help-format-line for details.
+
+    cadf  - CADF format, as a JSON string.
+            Invoke with --help-format-cadf for details.
+""")
+        sys.exit(2)
+
+
+class HelpFormatLineAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""
+For output format 'line', each log record is formatted as a single line whose
+content is defined in the 'line_format' parameter in the config file.
+
+The value of that config parameter is a Python new-style format string, using
+predefined names for the fields of the log message.
 
 The fields can be arbitrarily selected and ordered in the format string, and
 the complete syntax for replacement fields in new-style format strings can be
@@ -563,7 +602,8 @@ Supported fields:
 
 * time: The time stamp of the log entry, as reported by the HMC in the log
   entry data. This is the time stamp that is also shown in the HMC GUI.
-  The format of this field is defined in the 'time_format' config parameter.
+  The format of this field is defined in the 'time_format' parameter in the
+  config file.
   Invoke with --help-time-format for details.
 
 * label: The label for the HMC that was specified in the 'label' config
@@ -604,13 +644,56 @@ Example:
         sys.exit(2)
 
 
+class HelpFormatCADFAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""
+For output format 'cadf', each log record is formatted as a JSON string
+that conforms to the CADF standard (DMTF standard DSP0262).
+
+The following is an example log record in 'cadf' output format:
+
+  {
+      "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
+      "eventTime": "2019-06-22T13:00:00-04:00",
+      "eventType": "activity",
+      "action": "authenticate/login",
+      "initiator": {
+          "typeURI": "data/security/account/user",
+          "name": "exampleuser@ibm.com",
+          "host": {
+              "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) \
+AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.87 \
+Safari/537.36",
+              "address": "192.168.1.1"
+          }
+      },
+      "target": {
+          "id": "12",
+          "name": "LPAR123",
+          "type": "Partition"
+      },
+      "observer": {
+          "id":  "target",
+          "name": "HM-1-Example-Host-Name"
+      },
+      "outcome": "failure",
+      "reason": {
+          "reasonType": "HTTP",
+          "reasonCode": "401"
+      }
+  }
+""")
+        sys.exit(2)
+
+
 class HelpTimeFormatAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
 The format for the 'time' field in the output for each log message is defined
-in the 'time_format' config parameter using a Python datetime.strftime() format
-string, or alternatively some keywords:
+in the 'time_format' parameter in the config file, using a Python
+datetime.strftime() format string, or alternatively the following keywords:
 
 - iso8601: ISO 8601 format with 'T' as delimiter,
   e.g. 2019-08-09T12:46:38.550000+02:00
@@ -619,7 +702,7 @@ string, or alternatively some keywords:
 - Any other value is interpreted as datetime.strftime() format string.
 
 The format for the 'asctime' field in any self-logged messages is defined in
-the 'selflog_time_format' config parameter also using a Python
+the 'selflog_time_format' parameter in the config file, also using a Python
 datetime.strftime() format string.
 
 The syntax for datetime.strftime() format strings is described here:
@@ -673,9 +756,17 @@ def parse_args():
         action=HelpConfigFileAction, nargs=0,
         help="Show help about the config file format and exit.")
     general_opts.add_argument(
-        '--help-log-format',
-        action=HelpLogFormatAction, nargs=0,
-        help="Show help about the log message formatting and exit.")
+        '--help-format',
+        action=HelpFormatAction, nargs=0,
+        help="Show help about the output formats and exit.")
+    general_opts.add_argument(
+        '--help-format-line',
+        action=HelpFormatLineAction, nargs=0,
+        help="Show help about the 'line' output format and exit.")
+    general_opts.add_argument(
+        '--help-format-cadf',
+        action=HelpFormatCADFAction, nargs=0,
+        help="Show help about the 'cadf' output format and exit.")
     general_opts.add_argument(
         '--help-time-format',
         action=HelpTimeFormatAction, nargs=0,
@@ -720,7 +811,7 @@ class LogEntry(object):
 
 class OutputHandler(object):
     """
-    Handle the outputting of log messages for a single log forwarding.
+    Handle the outputting of log records for a single log forwarding.
     """
 
     def __init__(self, config_parms, fwd_parms):
@@ -742,10 +833,15 @@ class OutputHandler(object):
         self.label_hdr = label_hdr.ljust(self.label_len)
         self.label = label.ljust(self.label_len)
 
-        # Check validity of the format string:
         format = self.fwd_parms['format']
+        if format == 'cadf':
+            raise NotImplementedError
+            # TODO: Implement support for CADF
+
+        # Check validity of the line_format string:
+        line_format = self.fwd_parms['line_format']
         try:
-            format.format(
+            line_format.format(
                 time='test', label='test', log='test', name='test', id='test',
                 user='test', msg='test', msg_vars='test',
                 detail_msgs='test', detail_msgs_vars='test')
@@ -753,8 +849,8 @@ class OutputHandler(object):
             # KeyError is raised when the format string contains a named
             # placeholder that is not provided in format().
             raise UserError(
-                "Config parameter 'format' in forwarding '{name}' specifies "
-                "an invalid field: {msg}".
+                "Config parameter 'line_format' in forwarding '{name}' "
+                "specifies an invalid field: {msg}".
                 format(name=self.fwd_parms['name'], msg=str(exc)))
 
         # Check validity of the time_format string:
@@ -776,10 +872,10 @@ class OutputHandler(object):
 
     def output_begin(self):
         dest = self.fwd_parms['dest']
-        format = self.fwd_parms['format']
+        line_format = self.fwd_parms['line_format']
         if dest in ('stdout', 'stderr'):
             dest_stream = getattr(sys, dest)
-            out_str = format.format(
+            out_str = line_format.format(
                 time='Time', label=self.label_hdr, log='Log', name='Name',
                 id='ID', user='Userid', msg='Message',
                 msg_vars='Message variables', detail_msgs='Detail messages',
@@ -855,11 +951,11 @@ class OutputHandler(object):
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
         dest = self.fwd_parms['dest']
-        format = self.fwd_parms['format']
+        line_format = self.fwd_parms['line_format']
         if dest in ('stdout', 'stderr'):
             dest_stream = getattr(sys, dest)
             for row in sorted_table:
-                out_str = format.format(
+                out_str = line_format.format(
                     time=self.formatted_time(row.time), label=row.label,
                     log=row.log, name=row.name, id=row.id, user=row.user,
                     msg=row.msg, msg_vars=row.msg_vars,
@@ -870,7 +966,7 @@ class OutputHandler(object):
         else:
             assert dest == 'syslog'
             for row in sorted_table:
-                out_str = format.format(
+                out_str = line_format.format(
                     time=self.formatted_time(row.time), label=row.label,
                     log=row.log, name=row.name, id=row.id, user=row.user,
                     msg=row.msg, msg_vars=row.msg_vars,
@@ -1087,6 +1183,7 @@ def main():
             name = fwd_parms['name']
             logs = fwd_parms['logs']
             dest = fwd_parms['dest']
+            format = fwd_parms['format']
             syslog_host = fwd_parms['syslog_host']
             syslog_port = fwd_parms['syslog_port']
             syslog_porttype = fwd_parms['syslog_porttype']
@@ -1101,8 +1198,10 @@ def main():
                            syslog_facility)
 
             SELF_LOGGER.info(
-                "Forwarding: '{name}'; Logs: {logs}; Destination: {dest}".
-                format(name=name, logs=', '.join(logs), dest=dest_str))
+                "Forwarding: '{name}'; Logs: {logs}; Destination: {dest}; "
+                "Format: {format}".
+                format(name=name, logs=', '.join(logs), dest=dest_str,
+                       format=format))
 
             out_handler = OutputHandler(config.parms, fwd_parms)
             out_handlers.append(out_handler)
