@@ -458,12 +458,12 @@ class Config(object):
 class HelpConfigFileAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
-        print("""
-The config file is in YAML format. Here is an example config file, with all
-supported config parameters and their descriptions:
+        print("""---
+# Config file for the zhmc_log_forwarder command, in YAML format.
 
----
-# Example config file
+# This is an example config file with all supported config parameters and their
+# descriptions. You need to edit the file for setting at least the hmc_*
+# and syslog_* parameters.
 
 # IP address or hostname of the HMC.
 hmc_host: 10.11.12.13
