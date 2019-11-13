@@ -50,7 +50,8 @@ pbr==1.10.0
 PyYAML==3.13
 python-dateutil==2.7.5
 requests==2.20.0
-# zhmcclient==0.24.0
+zhmcclient==0.24.0
+jsonschema==3.0.0
 
 # Indirect dependencies that are needed to address issues:
 # None
@@ -123,7 +124,6 @@ ipython_genutils==0.1.0
 ipywidgets==5.2.2
 isort==4.2.5
 Jinja2==2.8
-jsonschema==2.5.1
 jupyter_client==4.4.0
 jupyter_console==5.0.0
 jupyter_core==4.2.1
