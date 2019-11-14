@@ -26,6 +26,7 @@ import logging
 from logging.handlers import SysLogHandler
 from logging import StreamHandler
 import socket
+import json
 import jsonschema
 
 import attr
@@ -821,6 +822,8 @@ class OutputHandler(object):
           config_parms (dict): Configuration parameters, overall.
 
           fwd_parms (dict): Configuration parameters for the forwarding.
+            Some of the more relevant fields are:
+            * format: line / cadf - output format
         """
         self.config_parms = config_parms
         self.fwd_parms = fwd_parms
@@ -834,24 +837,22 @@ class OutputHandler(object):
         self.label = label.ljust(self.label_len)
 
         format = self.fwd_parms['format']
-        if format == 'cadf':
-            raise NotImplementedError
-            # TODO: Implement support for CADF
 
-        # Check validity of the line_format string:
-        line_format = self.fwd_parms['line_format']
-        try:
-            line_format.format(
-                time='test', label='test', log='test', name='test', id='test',
-                user='test', msg='test', msg_vars='test',
-                detail_msgs='test', detail_msgs_vars='test')
-        except KeyError as exc:
-            # KeyError is raised when the format string contains a named
-            # placeholder that is not provided in format().
-            raise UserError(
-                "Config parameter 'line_format' in forwarding '{name}' "
-                "specifies an invalid field: {msg}".
-                format(name=self.fwd_parms['name'], msg=str(exc)))
+        if format == 'line':
+            # Check validity of the line_format string:
+            line_format = self.fwd_parms['line_format']
+            try:
+                line_format.format(
+                    time='test', label='test', log='test', name='test', id='test',
+                    user='test', msg='test', msg_vars='test',
+                    detail_msgs='test', detail_msgs_vars='test')
+            except KeyError as exc:
+                # KeyError is raised when the format string contains a named
+                # placeholder that is not provided in format().
+                raise UserError(
+                    "Config parameter 'line_format' in forwarding '{name}' "
+                    "specifies an invalid field: {msg}".
+                    format(name=self.fwd_parms['name'], msg=str(exc)))
 
         # Check validity of the time_format string:
         dt = datetime.now()
@@ -863,6 +864,10 @@ class OutputHandler(object):
                 format(str(exc)))
 
     def formatted_time(self, dt):
+        """
+        Return a string that is the formatted input time `dt`, using the
+        time format specified in the 'time_format' field.
+        """
         time_format = self.fwd_parms['time_format']
         if time_format == 'iso8601':
             return dt.isoformat()
@@ -871,18 +876,27 @@ class OutputHandler(object):
         return dt.strftime(time_format)  # already checked in __init__()
 
     def output_begin(self):
+        """
+        Called once at begin of outputting any records.
+
+        Can be used for writing header information to the destination (e.g.
+        a table header in case of stdout), or for initializing attributes or
+        resources such as Python loggers (e.g. when writing to syslog).
+        """
         dest = self.fwd_parms['dest']
+        format = self.fwd_parms['format']
         line_format = self.fwd_parms['line_format']
         if dest in ('stdout', 'stderr'):
-            dest_stream = getattr(sys, dest)
-            out_str = line_format.format(
-                time='Time', label=self.label_hdr, log='Log', name='Name',
-                id='ID', user='Userid', msg='Message',
-                msg_vars='Message variables', detail_msgs='Detail messages',
-                detail_msgs_vars='Detail messages variables')
-            print(out_str, file=dest_stream)
-            print("-" * 120, file=dest_stream)
-            dest_stream.flush()
+            if format == 'line':
+                dest_stream = getattr(sys, dest)
+                out_str = line_format.format(
+                    time='Time', label=self.label_hdr, log='Log', name='Name',
+                    id='ID', user='Userid', msg='Message',
+                    msg_vars='Message variables', detail_msgs='Detail messages',
+                    detail_msgs_vars='Detail messages variables')
+                print(out_str, file=dest_stream)
+                print("-" * 120, file=dest_stream)
+                dest_stream.flush()
         else:
             assert dest == 'syslog'
             self.syslog_host = self.fwd_parms['syslog_host']
@@ -914,16 +928,29 @@ class OutputHandler(object):
             self.logger.setLevel(logging.INFO)
 
     def output_end(self):
+        """
+        Called once at end of outputting any records.
+
+        Can be used for writing footer information to the destination (e.g.
+        a table header in case of stdout), or for cleaning up resources such
+        as Python loggers (e.g. when writing to syslog).
+        """
         dest = self.fwd_parms['dest']
+        format = self.fwd_parms['format']
         if dest in ('stdout', 'stderr'):
-            dest_stream = getattr(sys, dest)
-            print("-" * 120, file=dest_stream)
-            dest_stream.flush()
+            if format == 'line':
+                dest_stream = getattr(sys, dest)
+                print("-" * 120, file=dest_stream)
+                dest_stream.flush()
         else:
             assert dest == 'syslog'
-            pass  # nothing to do
+            # Loggers do not need to be cleaned up
 
     def output_entries(self, log_entries):
+        """
+        Called for outputting a set of log records.
+        Can be called multiple times.
+        """
         table = list()
         for le in log_entries:
             le_log = le['log-type']
@@ -950,28 +977,53 @@ class OutputHandler(object):
                 detail_msgs_vars=le_detail_msgs_vars)
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
+
+        format = self.fwd_parms['format']
+        if format == 'line':
+            line_format = self.fwd_parms['line_format']
+            out_str = line_format.format(
+                time=self.formatted_time(row.time), label=row.label,
+                log=row.log, name=row.name, id=row.id, user=row.user,
+                msg=row.msg, msg_vars=row.msg_vars,
+                detail_msgs=row.detail_msgs,
+                detail_msgs_vars=row.detail_msgs_vars)
+        else:
+            assert format == 'cadf'
+            out_dict = {
+                "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
+                "eventTime": self.formatted_time(row.time),
+                "eventType": "activity",
+                "action": "any",
+                "initiator": {
+                    "typeURI": "data/security/account/user",
+                    "name": row.user,
+                },
+                "target": {
+                    "id": "TBD",
+                    "name": "TBD",
+                    "type": "TBD",
+                },
+                "observer": {
+                    "id":  "TBD",
+                    "name": row.label,
+                },
+                "outcome": row.msg,
+                "reason": {
+                    "reasonType": "HMC",
+                    "reasonCode": row.id,
+                }
+            }
+            out_str = json.dumps(out_dict, indent=4)
+
         dest = self.fwd_parms['dest']
-        line_format = self.fwd_parms['line_format']
         if dest in ('stdout', 'stderr'):
             dest_stream = getattr(sys, dest)
             for row in sorted_table:
-                out_str = line_format.format(
-                    time=self.formatted_time(row.time), label=row.label,
-                    log=row.log, name=row.name, id=row.id, user=row.user,
-                    msg=row.msg, msg_vars=row.msg_vars,
-                    detail_msgs=row.detail_msgs,
-                    detail_msgs_vars=row.detail_msgs_vars)
                 print(out_str, file=dest_stream)
                 dest_stream.flush()
         else:
             assert dest == 'syslog'
             for row in sorted_table:
-                out_str = line_format.format(
-                    time=self.formatted_time(row.time), label=row.label,
-                    log=row.log, name=row.name, id=row.id, user=row.user,
-                    msg=row.msg, msg_vars=row.msg_vars,
-                    detail_msgs=row.detail_msgs,
-                    detail_msgs_vars=row.detail_msgs_vars)
                 try:
                     self.logger.info(out_str)
                 except Exception as exc:
