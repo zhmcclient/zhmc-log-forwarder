@@ -46,6 +46,10 @@ DEST_LOGGER_NAME = CMD_NAME + '_dest'
 SELF_LOGGER_NAME = CMD_NAME
 SELF_LOGGER = None  # Will be initialized in main()
 
+# Indent for JSON output to CADF (None=oneline)
+CADF_JSON_INDENT = None
+
+
 try:
     textwrap.indent
 except AttributeError:  # undefined function (wasn't added until Python 3.3)
@@ -1013,7 +1017,7 @@ class OutputHandler(object):
                     "reasonCode": row.id,
                 }
             }
-            out_str = json.dumps(out_dict, indent=4)
+            out_str = json.dumps(out_dict, indent=CADF_JSON_INDENT)
 
         dest = self.fwd_parms['dest']
         if dest in ('stdout', 'stderr'):
