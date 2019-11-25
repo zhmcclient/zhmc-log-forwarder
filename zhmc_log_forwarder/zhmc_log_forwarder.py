@@ -1165,8 +1165,8 @@ class OutputHandler(object):
             line_format = self.fwd_parms['line_format']
             try:
                 line_format.format(
-                    time='test', label='test', log='test', name='test', id='test',
-                    user='test', msg='test', msg_vars='test',
+                    time='test', label='test', log='test', name='test',
+                    id='test', user='test', msg='test', msg_vars='test',
                     detail_msgs='test', detail_msgs_vars='test')
             except KeyError as exc:
                 # KeyError is raised when the format string contains a named
@@ -1214,7 +1214,8 @@ class OutputHandler(object):
                 out_str = line_format.format(
                     time='Time', label=self.label_hdr, log='Log', name='Name',
                     id='ID', user='Userid', msg='Message',
-                    msg_vars='Message variables', detail_msgs='Detail messages',
+                    msg_vars='Message variables',
+                    detail_msgs='Detail messages',
                     detail_msgs_vars='Detail messages variables')
                 print(out_str, file=dest_stream)
                 print("-" * 120, file=dest_stream)
@@ -1359,7 +1360,7 @@ class OutputHandler(object):
                     ("reasonCode", row.id),
                 ])),
                 ("observer", OrderedDict([
-                    ("id",  "TBD"),
+                    ("id", "TBD"),
                     ("name", row.label),
                 ])),
                 ("x_message", OrderedDict([
