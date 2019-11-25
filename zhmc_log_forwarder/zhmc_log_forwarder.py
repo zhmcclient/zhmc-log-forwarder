@@ -200,14 +200,16 @@ CONFIG_FILE_SCHEMA = {
         },
         "log_message_file": {
             "$id": "#/properties/log_message_file",
-            "type": "string",
+            "type": ["string", "null"],
             "title": "File path of HMC log message file (in YAML format) "
             "to be used with the cadf output format. Relative file paths are "
             "relative to the directory containing the config file. "
+            "Default is null, which causes the file provided with the "
+            "zhmc_log_forwarder package to be used. "
             "Invoke with --help-log-message-file for details.",
             "default": None,
             "examples": [
-                "log_message_file.yml"
+                "zhmc_log_messages.yml"
             ],
         },
         "forwardings": {
@@ -778,8 +780,9 @@ selflog_time_format: '%Y-%m-%d %H:%M:%S.%f%z'
 
 # File path of HMC log message file (in YAML format) to be used with the
 # cadf output format. Relative file paths are relative to the directory
-# containing this config file.
-log_message_file: zhmc_log_messages.yml
+# containing this config file. Default is null, which causes the file
+# provided with the zhmc_log_forwarder package to be used.
+log_message_file: null
 
 # List of log forwardings. A log forwarding mainly defines a set of logs to
 # collect, and a destination to forward them to.
@@ -1573,10 +1576,11 @@ def main():
             if not os.path.isabs(log_message_file):
                 config_dir = os.path.dirname(args.config_file)
                 log_message_file = os.path.join(config_dir, log_message_file)
-            log_message_config = LogMessageConfig()
-            log_message_config.load_message_file(log_message_file)
         else:
-            log_message_config = None
+            my_dir = os.path.dirname(__file__)
+            log_message_file = os.path.join(my_dir, 'zhmc_log_messages.yml')
+        log_message_config = LogMessageConfig()
+        log_message_config.load_message_file(log_message_file)
 
         if since == 'all':
             begin_time = None
