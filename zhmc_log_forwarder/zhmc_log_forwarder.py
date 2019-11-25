@@ -28,6 +28,7 @@ import logging
 from logging.handlers import SysLogHandler
 from logging import StreamHandler
 import socket
+import uuid
 import json
 import jsonschema
 
@@ -50,7 +51,10 @@ SELF_LOGGER_NAME = CMD_NAME
 SELF_LOGGER = None  # Will be initialized in main()
 
 # Indent for JSON output to CADF (None=oneline)
-CADF_JSON_INDENT = None
+CADF_JSON_INDENT = 4
+
+# Debug flag: Include full HMC log record in CADF output
+DEBUG_CADF_INCLUDE_FULL_RECORD = False
 
 
 try:
@@ -956,27 +960,17 @@ single line, can be controlled with the CADF_JSON_INDENT global variable.
 The following is an example log record in 'cadf' output format:
 
 {
+    "id": "zhmc_log_forwarder:e3c43ae3-037b-4b64-9721-3242ea94c9e7",
     "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
-    "eventTime": "2019-11-25T12:53:44+0100",
+    "eventTime": "2019-11-25T19:06:37+0100",
     "eventType": "activity",
-    "action": "authenticate",
+    "action": "authenticate/logon",
     "outcome": "success",
-    "reason": {
-        "reasonType": "HMC",
-        "reasonCode": "1941"
-    },
-    "initiator": {
-        "typeURI": "data/security/account/user",
-        "name": "zbcInstall"
-    },
-    "target": {
-        "id": "TBD: HMC resource URI",
-        "type": "service",
-        "name": "TBD: HMC resource name"
-    },
     "observer": {
-        "id": "TBD",
-        "name": "wdc04-05.HMC1"
+        "id": "hmc:/api/console",
+        "typeURI": "service",
+        "name": "HMC1",
+        "x_label": "wdc04-05.HMC1"
     },
     "x_message": {
         "number": "1941",
@@ -987,7 +981,7 @@ The following is an example log record in 'cadf' output format:
                 "string"
             ],
             [
-                "Sx9feb3000-e9e7-11e9-bf4a-00106f237ab1.5373",
+                "Sx9feb3000-e9e7-11e9-bf4a-00106f237ab1.53dd",
                 "string"
             ],
             [
@@ -995,6 +989,17 @@ The following is an example log record in 'cadf' output format:
                 "string"
             ]
         ]
+    },
+    "initiator": {
+        "id": "hmc:/api/users/1c114a6a-dba3-11e8-8643-00106f237ab1",
+        "typeURI": "data/security/account/user",
+        "name": "zbcInstall"
+    },
+    "target": {
+        "id": "hmc:/api/console",
+        "typeURI": "service",
+        "name": "HMC1",
+        "x_class": "console"
     }
 }
 
@@ -1121,11 +1126,13 @@ class LogEntry(object):
     log = attr.attrib(type=str)  # HMC log (security, audit)
     name = attr.attrib(type=str)  # Name of the log entry
     id = attr.attrib(type=int)  # ID of the log entry
-    user = attr.attrib(type=str)  # HMC userid associated with log entry
+    user_name = attr.attrib(type=str)  # Name of HMC userid for log entry
+    user_id = attr.attrib(type=str)  # Object-ID of HMC userid for log entry
     msg = attr.attrib(type=str)  # Formatted message
     msg_vars = attr.attrib(type=list)  # List of subst.vars in message
     detail_msgs = attr.attrib(type=list)  # List of formatted detail messages
     detail_msgs_vars = attr.attrib(type=list)  # List of list of subst.vars
+    full_record = attr.attrib(type=dict)  # Dict with full HMC log record
 
 
 class OutputHandler(object):
@@ -1269,7 +1276,7 @@ class OutputHandler(object):
             assert dest == 'syslog'
             # Loggers do not need to be cleaned up
 
-    def output_entries(self, log_entries):
+    def output_entries(self, log_entries, console):
         """
         Called for outputting a set of log records.
         Can be called multiple times.
@@ -1284,7 +1291,8 @@ class OutputHandler(object):
                 hmc_time, dateutil_tz.tzlocal())
             le_name = le['event-name']
             le_id = le['event-id']
-            le_user = le['userid'] or ''
+            le_user_name = le['userid'] or ''
+            le_user_id = le['user-uri'] or ''
             le_msg = le['event-message']
             data_items = le['event-data-items']
             data_items = sorted(data_items,
@@ -1295,9 +1303,11 @@ class OutputHandler(object):
             le_detail_msgs_vars = []  # TODO: Implement detail messages vars.
             row = LogEntry(
                 time=le_time, label=self.label, log=le_log, name=le_name,
-                id=le_id, user=le_user, msg=le_msg, msg_vars=le_msg_vars,
+                id=le_id, user_name=le_user_name, user_id=le_user_id,
+                msg=le_msg, msg_vars=le_msg_vars,
                 detail_msgs=le_detail_msgs,
-                detail_msgs_vars=le_detail_msgs_vars)
+                detail_msgs_vars=le_detail_msgs_vars,
+                full_record=le)
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
 
@@ -1305,13 +1315,13 @@ class OutputHandler(object):
         if dest in ('stdout', 'stderr'):
             dest_stream = getattr(sys, dest)
             for row in sorted_table:
-                out_str = self.out_str(row)
+                out_str = self.out_str(row, console)
                 print(out_str, file=dest_stream)
                 dest_stream.flush()
         else:
             assert dest == 'syslog'
             for row in sorted_table:
-                out_str = self.out_str(row)
+                out_str = self.out_str(row, console)
                 try:
                     self.logger.info(out_str)
                 except Exception as exc:
@@ -1321,7 +1331,7 @@ class OutputHandler(object):
                         format(host=self.syslog_host, port=self.syslog_port,
                                porttype=self.syslog_porttype, msg=str(exc)))
 
-    def out_str(self, row):
+    def out_str(self, row, console):
         """
         Return an output string for the specified row that fits the specified
         output format.
@@ -1331,13 +1341,14 @@ class OutputHandler(object):
             line_format = self.fwd_parms['line_format']
             out_str = line_format.format(
                 time=self.formatted_time(row.time), label=row.label,
-                log=row.log, name=row.name, id=row.id, user=row.user,
+                log=row.log, name=row.name, id=row.id, user=row.user_name,
                 msg=row.msg, msg_vars=row.msg_vars,
                 detail_msgs=row.detail_msgs,
                 detail_msgs_vars=row.detail_msgs_vars)
         else:
             assert format == 'cadf'
             assert isinstance(self.log_message_config, LogMessageConfig)
+            assert isinstance(console, zhmcclient.Console)
             try:
                 msg_info = self.log_message_config.messages[row.id]
             except KeyError:
@@ -1349,19 +1360,19 @@ class OutputHandler(object):
                     target_type=None,
                     target_class=None
                 )
+            msg_id = uuid.uuid4().urn.lstrip('urn:uuid:')
             out_dict = OrderedDict([
+                ("id", "zhmc_log_forwarder:{}".format(msg_id)),
                 ("typeURI", "http://schemas.dmtf.org/cloud/audit/1.0/event"),
                 ("eventTime", self.formatted_time(row.time)),
                 ("eventType", "activity"),
                 ("action", msg_info.action),
                 ("outcome", msg_info.outcome),
-                ("reason", OrderedDict([
-                    ("reasonType", "HMC"),
-                    ("reasonCode", row.id),
-                ])),
                 ("observer", OrderedDict([
-                    ("id", "TBD"),
-                    ("name", row.label),
+                    ("id", "hmc:{id}".format(id=console.uri)),
+                    ("typeURI", "service"),
+                    ("name", console.name),
+                    ("x_label", row.label),
                 ])),
                 ("x_message", OrderedDict([
                     ("number", row.id),
@@ -1369,17 +1380,29 @@ class OutputHandler(object):
                     ("variables", row.msg_vars),
                 ])),
             ])
-            if row.user:
+            if row.user_name:
                 out_dict["initiator"] = OrderedDict([
+                    ("id", "hmc:{id}".format(id=row.user_id)),
                     ("typeURI", "data/security/account/user"),
-                    ("name", row.user),
+                    ("name", row.user_name),
                 ])
             if msg_info.target_type:
+                if msg_info.target_class == 'console':
+                    resource_id = "hmc:{id}".format(id=console.uri)
+                    resource_name = console.name
+                else:
+                    # TODO: Change id to use object-id of HMC target resource
+                    resource_id = "TODO:hmc:{resource.object-id}"
+                    # TODO: Change name to use name of HMC target resource
+                    resource_name = "TODO:{resource.name}"
                 out_dict["target"] = OrderedDict([
-                    ("id", "TBD: HMC resource URI"),
-                    ("type", msg_info.target_type),
-                    ("name", "TBD: HMC resource name"),
+                    ("id", resource_id),
+                    ("typeURI", msg_info.target_type),
+                    ("name", resource_name),
+                    ("x_class", msg_info.target_class),
                 ])
+            if DEBUG_CADF_INCLUDE_FULL_RECORD:
+                out_dict["x_full_record"] = row.full_record
             out_str = json.dumps(out_dict, indent=CADF_JSON_INDENT)
         return out_str
 
@@ -1644,7 +1667,7 @@ def main():
             log_entries = get_log_entries(
                 all_logs, console, begin_time=begin_time, end_time=None)
             for hdlr in out_handlers:
-                hdlr.output_entries(log_entries)
+                hdlr.output_entries(log_entries, console)
 
             if future:
                 topic_items = session.get_notification_topics()
@@ -1677,13 +1700,15 @@ def main():
                                         for le in log_entries:
                                             le['log-type'] = 'security'
                                         for hdlr in out_handlers:
-                                            hdlr.output_entries(log_entries)
+                                            hdlr.output_entries(
+                                                log_entries, console)
                                     elif topic_name == audit_topic_name:
                                         log_entries = message['log-entries']
                                         for le in log_entries:
                                             le['log-type'] = 'audit'
                                         for hdlr in out_handlers:
-                                            hdlr.output_entries(log_entries)
+                                            hdlr.output_entries(
+                                                log_entries, console)
                                     else:
                                         SELF_LOGGER.warning(
                                             "Ignoring invalid topic name: {}".
