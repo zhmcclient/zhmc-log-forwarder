@@ -51,7 +51,7 @@ SELF_LOGGER_NAME = CMD_NAME
 SELF_LOGGER = None  # Will be initialized in main()
 
 # Indent for JSON output to CADF (None=oneline)
-CADF_JSON_INDENT = 4
+CADF_JSON_INDENT = None
 
 # Debug flag: Include full HMC log record in CADF output
 DEBUG_CADF_INCLUDE_FULL_RECORD = False
