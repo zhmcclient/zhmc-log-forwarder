@@ -1392,9 +1392,9 @@ class OutputHandler(object):
                     resource_name = console.name
                 else:
                     # TODO: Change id to use object-id of HMC target resource
-                    resource_id = "TODO:hmc:{resource.object-id}"
+                    resource_id = "hmc:{TODO:resource.object-id}"
                     # TODO: Change name to use name of HMC target resource
-                    resource_name = "TODO:{resource.name}"
+                    resource_name = "{TODO:resource.name}"
                 out_dict["target"] = OrderedDict([
                     ("id", resource_id),
                     ("typeURI", msg_info.target_type),
