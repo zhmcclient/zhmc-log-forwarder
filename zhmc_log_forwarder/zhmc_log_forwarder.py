@@ -982,6 +982,32 @@ class OutputHandler(object):
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
 
+
+        dest = self.fwd_parms['dest']
+        if dest in ('stdout', 'stderr'):
+            dest_stream = getattr(sys, dest)
+            for row in sorted_table:
+                out_str = self.out_str(row)
+                print(out_str, file=dest_stream)
+                dest_stream.flush()
+        else:
+            assert dest == 'syslog'
+            for row in sorted_table:
+                out_str = self.out_str(row)
+                try:
+                    self.logger.info(out_str)
+                except Exception as exc:
+                    raise ConnectionError(
+                        "Cannot write log entry to syslog server at "
+                        "{host}, port {port}/{porttype}: {msg}".
+                        format(host=self.syslog_host, port=self.syslog_port,
+                               porttype=self.syslog_porttype, msg=str(exc)))
+
+    def out_str(self, row):
+        """
+        Return an output string for the specified row that fits the specified
+        output format.
+        """
         format = self.fwd_parms['format']
         if format == 'line':
             line_format = self.fwd_parms['line_format']
@@ -1018,24 +1044,7 @@ class OutputHandler(object):
                 }
             }
             out_str = json.dumps(out_dict, indent=CADF_JSON_INDENT)
-
-        dest = self.fwd_parms['dest']
-        if dest in ('stdout', 'stderr'):
-            dest_stream = getattr(sys, dest)
-            for row in sorted_table:
-                print(out_str, file=dest_stream)
-                dest_stream.flush()
-        else:
-            assert dest == 'syslog'
-            for row in sorted_table:
-                try:
-                    self.logger.info(out_str)
-                except Exception as exc:
-                    raise ConnectionError(
-                        "Cannot write log entry to syslog server at "
-                        "{host}, port {port}/{porttype}: {msg}".
-                        format(host=self.syslog_host, port=self.syslog_port,
-                               porttype=self.syslog_porttype, msg=str(exc)))
+        return out_str
 
 
 class DatetimeFormatter(logging.Formatter):
