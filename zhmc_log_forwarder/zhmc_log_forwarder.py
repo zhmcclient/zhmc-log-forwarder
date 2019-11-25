@@ -19,8 +19,10 @@ A log forwarder for the IBM Z HMC.
 
 from __future__ import print_function
 import sys
+import os
 import argparse
 from datetime import datetime
+from collections import OrderedDict
 import textwrap
 import logging
 from logging.handlers import SysLogHandler
@@ -36,6 +38,7 @@ import requests.packages.urllib3
 from dateutil import parser as dateutil_parser
 from dateutil import tz as dateutil_tz
 import zhmcclient
+
 
 CMD_NAME = 'zhmc_log_forwarder'
 PACKAGE_NAME = 'zhmc-log-forwarder'
@@ -189,6 +192,18 @@ CONFIG_FILE_SCHEMA = {
             "default": "%Y-%m-%d %H:%M:%S.%f%z",
             "examples": [
                 "%Y-%m-%d %H:%M:%S.%f%z"
+            ],
+        },
+        "log_message_file": {
+            "$id": "#/properties/log_message_file",
+            "type": "string",
+            "title": "File path of HMC log message file (in YAML format) "
+            "to be used with the cadf output format. Relative file paths are "
+            "relative to the directory containing the config file. "
+            "Invoke with --help-log-message-file for details.",
+            "default": None,
+            "examples": [
+                "log_message_file.yml"
             ],
         },
         "forwardings": {
@@ -359,6 +374,110 @@ CONFIG_FILE_SCHEMA = {
 }
 
 
+# JSON schema describing the structure of HMC log message files
+LOG_MESSAGE_FILE_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "http://example.com/root.json",
+    "definitions": {},
+    "type": "object",
+    "title": "zhmc_log_forwarder HMC log message file",
+    "required": [
+        "hmc_version",
+        "messages",
+    ],
+    "additionalProperties": False,
+    "properties": {
+        "hmc_version": {
+            "$id": "#/properties/hmc_version",
+            "type": "string",
+            "title": "HMC version to which this log message file applies",
+            "examples": [
+                "2.14.1"
+            ],
+        },
+        "messages": {
+            "$id": "#/properties/messages",
+            "type": "array",
+            "title": "List of recognized HMC log messages",
+            "items": {
+                "$id": "#/properties/messages/items",
+                "type": "object",
+                "required": [
+                    "number",
+                    "message",
+                    "action",
+                    "outcome",
+                    "target_type",
+                    "target_class",
+                ],
+                "additionalProperties": False,
+                "properties": {
+                    "number": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "number",
+                        "type": "string",
+                        "title": "event-id / number of HMC log message.",
+                        "examples": [
+                            "1234"
+                        ],
+                    },
+                    "message": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "message",
+                        "type": "string",
+                        "title": "message template of HMC log message.",
+                        "examples": [
+                            "The user {0} logged on."
+                        ],
+                    },
+                    "action": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "action",
+                        "type": "string",
+                        "title": "CADF action. "
+                        "See DSP0262 'CADF Action Taxonomy'.",
+                        "examples": [
+                            "authenticate"
+                        ],
+                    },
+                    "outcome": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "outcome",
+                        "type": "string",
+                        "title": "CADF outcome. "
+                        "See DSP0262 'CADF Outcome Taxonomy'.",
+                        "examples": [
+                            "success"
+                        ],
+                    },
+                    "target_type": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "target_type",
+                        "type": "string",
+                        "title": "CADF typeURI of target resource. "
+                        "See DSP0262 A.2 'CADF Resource Taxonomy'.",
+                        "examples": [
+                            "service"
+                        ],
+                    },
+                    "target_class": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "target_class",
+                        "type": "string",
+                        "title": "HMC resource class of target resource. "
+                        "See HMS WS API book, 'class' property of the data "
+                        "models.",
+                        "examples": [
+                            "partition"
+                        ],
+                    },
+                },
+            },
+        }
+    }
+}
+
+
 def extend_with_default(validator_class):
     """
     Factory function that returns a new JSON schema validator class that
@@ -475,6 +594,135 @@ class Config(object):
                     val_value=exc.validator_value))
 
 
+class LogMessage(object):
+    """
+    An HMC log message with sufficient data to allow producing the
+    message-specific parts of a CADF event representing the event described by
+    the log message.
+    """
+
+    def __init__(self, number, message, action, outcome, target_type,
+                 target_class):
+
+        #: string: event-id / number of HMC log message
+        self.number = number
+
+        #: string: message template of HMC log message
+        self.message = message
+
+        #: string: CADF action
+        #: See DSP0262 A.3 "CADF Action Taxonomy"
+        self.action = action
+
+        #: string: CADF outcome
+        #: See DSP0262 A.4 "CADF Outcome Taxonomy"
+        self.outcome = outcome
+
+        #: string: typeURI of target resource
+        #: See DSP0262 A.2 "CADF Resource Taxonomy"
+        self.target_type = target_type
+
+        #: string: HMC resource class of target resource
+        #: See HMS WS API book, 'class' property of the data models
+        #: Example: 'partition'
+        self.target_class = target_class
+
+
+class LogMessageConfig(dict):
+    """
+    HMC log messages to be used, as loaded from HMC log message file.
+    """
+
+    def __init__(self):
+
+        # HMC log message file structure, as a JSON schema.
+        self._schema = LOG_MESSAGE_FILE_SCHEMA
+
+        # Data from the HMC log message file.
+        self._data = None
+
+        # Messages from the file, as a dict of LogMessage objects, by
+        # message number.
+        self._messages = None
+
+    def __repr__(self):
+        data = dict(self._data)
+        return 'LogMessageConfig({!r})'.format(data)
+
+    @property
+    def messages(self):
+        """
+        The HMC log messages recognized by the the HMC log message file, as a
+        dict of LogMessage objects, by message number.
+        """
+        return self._messages
+
+    def load_message_file(self, filepath):
+        """
+        Load the HMC log message file (a YAML file) and set the corresponding
+        attributes of this object. Omitted properties are defaulted to the
+        defaults defined in the JSON schema.
+
+        Parameters:
+
+          filepath (string): File path of the HMC log message file.
+        """
+
+        # Load HMC log message file
+        try:
+            with open(filepath, 'r') as fp:
+                self._data = yaml.safe_load(fp)
+        except IOError as exc:
+            raise UserError(
+                "Cannot load HMC log message file {}: {}".
+                format(filepath, exc))
+
+        # Use a validator that adds defaults for omitted parameters
+        ValidatorWithDefaults = extend_with_default(jsonschema.Draft7Validator)
+        validator = ValidatorWithDefaults(self._schema)
+
+        # Validate structure of loaded config parms
+        try:
+            validator.validate(self._data)
+        except jsonschema.exceptions.ValidationError as exc:
+            item_str = ''
+            for p in exc.absolute_path:
+                # Path contains list index numbers as integers
+                if isinstance(p, int):
+                    item_str += '[{}]'.format(p)
+                else:
+                    if item_str != '':
+                        item_str += '.'
+                    item_str += p
+            raise UserError(
+                "HMC log message file {file} contains an invalid item {item}: "
+                "{msg} (Validation details: Schema item: {schema_item}; "
+                "Failing validator: {val_name}={val_value})".
+                format(
+                    file=filepath,
+                    msg=exc.message,
+                    item=item_str,
+                    schema_item='.'.join(exc.absolute_schema_path),
+                    val_name=exc.validator,
+                    val_value=exc.validator_value))
+
+        # Set up the other attributes
+
+        self._messages = dict()
+        messages = self._data['messages']
+        for m in messages:
+            number = m['number']
+            m_obj = LogMessage(
+                number=number,
+                message=m['message'],
+                action=m['action'],
+                outcome=m['outcome'],
+                target_type=m['target_type'],
+                target_class=m['target_class']
+            )
+            self._messages[number] = m_obj
+
+
 class HelpConfigFileAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
@@ -524,6 +772,11 @@ selflog_format: '%(levelname)s: %(message)s'
 # Invoke with --help-time-format for details.
 selflog_time_format: '%Y-%m-%d %H:%M:%S.%f%z'
 
+# File path of HMC log message file (in YAML format) to be used with the
+# cadf output format. Relative file paths are relative to the directory
+# containing this config file.
+log_message_file: zhmc_log_messages.yml
+
 # List of log forwardings. A log forwarding mainly defines a set of logs to
 # collect, and a destination to forward them to.
 forwardings:
@@ -568,6 +821,47 @@ forwardings:
     # datetime.strftime() format string.
     # Invoke with --help-time-format for details.
     time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+""")
+        sys.exit(2)
+
+
+class HelpLogMessageFileAction(argparse.Action):
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("""---
+# HMC log message file for the zhmc_log_forwarder command, in YAML format.
+#
+# This file defines information about HMC log messages that allows translating
+# an HMC log message received from the HMC into a CADF event.
+#
+# For a list of the possible HMC log messages, see the Help system of a real
+# HMC, in section "Introduction" -> "Audit, Event, and Security Log Messages".
+#
+# For the CADF standard DSP0262, see
+# https://www.dmtf.org/sites/default/files/standards/documents/DSP0262_1.0.0.pdf
+#
+# The data specified for each HMC log message in this file, is:
+# * number (string): event-id / number of HMC log message.
+# * message (string): message template of HMC log message.
+# * action (string): CADF action. See DSP0262 "CADF Action Taxonomy".
+# * outcome (string): CADF outcome. See DSP0262 "CADF Outcome Taxonomy".
+# * target_type (string): CADF typeURI of target resource. See DSP0262
+#   A.2 "CADF Resource Taxonomy".
+# * target_class (string): HMC resource class of target resource. See HMS WS
+#   API book, 'class' property of the data models. Example: 'partition'.
+
+# HMC version to which this HMC log message file applies
+hmc_version: "2.14.1"
+
+# The HMC log messages that will be recognized by zhmc_log_forwarder
+messages:
+  -
+    number: '216'
+    message: "User {0} has logged on in {1} mode"
+    action: authenticate
+    outcome: success
+    target_type: service
+    target_class: console
 """)
         sys.exit(2)
 
@@ -656,38 +950,54 @@ class HelpFormatCADFAction(argparse.Action):
 For output format 'cadf', each log record is formatted as a JSON string
 that conforms to the CADF standard (DMTF standard DSP0262).
 
+The indentation of the produced JSON, including whether it should be on a
+single line, can be controlled with the CADF_JSON_INDENT global variable.
+
 The following is an example log record in 'cadf' output format:
 
-  {
-      "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
-      "eventTime": "2019-06-22T13:00:00-04:00",
-      "eventType": "activity",
-      "action": "authenticate/login",
-      "initiator": {
-          "typeURI": "data/security/account/user",
-          "name": "exampleuser@ibm.com",
-          "host": {
-              "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_1) \
-AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.87 \
-Safari/537.36",
-              "address": "192.168.1.1"
-          }
-      },
-      "target": {
-          "id": "12",
-          "name": "LPAR123",
-          "type": "Partition"
-      },
-      "observer": {
-          "id":  "target",
-          "name": "HM-1-Example-Host-Name"
-      },
-      "outcome": "failure",
-      "reason": {
-          "reasonType": "HTTP",
-          "reasonCode": "401"
-      }
-  }
+{
+    "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
+    "eventTime": "2019-11-25T12:53:44+0100",
+    "eventType": "activity",
+    "action": "authenticate",
+    "outcome": "success",
+    "reason": {
+        "reasonType": "HMC",
+        "reasonCode": "1941"
+    },
+    "initiator": {
+        "typeURI": "data/security/account/user",
+        "name": "zbcInstall"
+    },
+    "target": {
+        "id": "TBD: HMC resource URI",
+        "type": "service",
+        "name": "TBD: HMC resource name"
+    },
+    "observer": {
+        "id": "TBD",
+        "name": "wdc04-05.HMC1"
+    },
+    "x_message": {
+        "number": "1941",
+        "text": "User zbcInstall has logged on to Web Services API ...",
+        "variables": [
+            [
+                "zbcInstall",
+                "string"
+            ],
+            [
+                "Sx9feb3000-e9e7-11e9-bf4a-00106f237ab1.5373",
+                "string"
+            ],
+            [
+                "10.183.204.141",
+                "string"
+            ]
+        ]
+    }
+}
+
 """)
         sys.exit(2)
 
@@ -761,6 +1071,10 @@ def parse_args():
         action=HelpConfigFileAction, nargs=0,
         help="Show help about the config file format and exit.")
     general_opts.add_argument(
+        '--help-log-message-file',
+        action=HelpLogMessageFileAction, nargs=0,
+        help="Show help about the HMC log message file format and exit.")
+    general_opts.add_argument(
         '--help-format',
         action=HelpFormatAction, nargs=0,
         help="Show help about the output formats and exit.")
@@ -819,17 +1133,21 @@ class OutputHandler(object):
     Handle the outputting of log records for a single log forwarding.
     """
 
-    def __init__(self, config_parms, fwd_parms):
+    def __init__(self, config_parms, log_message_config, fwd_parms):
         """
         Parameters:
 
           config_parms (dict): Configuration parameters, overall.
+
+          log_message_config (LogMessageConfig): HMC log messages for CADF
+            output format, or None for other output formats.
 
           fwd_parms (dict): Configuration parameters for the forwarding.
             Some of the more relevant fields are:
             * format: line / cadf - output format
         """
         self.config_parms = config_parms
+        self.log_message_config = log_message_config
         self.fwd_parms = fwd_parms
 
         self.logger = None
@@ -982,7 +1300,6 @@ class OutputHandler(object):
             table.append(row)
         sorted_table = sorted(table, key=lambda row: row.time)
 
-
         dest = self.fwd_parms['dest']
         if dest in ('stdout', 'stderr'):
             dest_stream = getattr(sys, dest)
@@ -1019,30 +1336,49 @@ class OutputHandler(object):
                 detail_msgs_vars=row.detail_msgs_vars)
         else:
             assert format == 'cadf'
-            out_dict = {
-                "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
-                "eventTime": self.formatted_time(row.time),
-                "eventType": "activity",
-                "action": "any",
-                "initiator": {
-                    "typeURI": "data/security/account/user",
-                    "name": row.user,
-                },
-                "target": {
-                    "id": "TBD",
-                    "name": "TBD",
-                    "type": "TBD",
-                },
-                "observer": {
-                    "id":  "TBD",
-                    "name": row.label,
-                },
-                "outcome": row.msg,
-                "reason": {
-                    "reasonType": "HMC",
-                    "reasonCode": row.id,
-                }
-            }
+            assert isinstance(self.log_message_config, LogMessageConfig)
+            try:
+                msg_info = self.log_message_config.messages[row.id]
+            except KeyError:
+                msg_info = LogMessage(
+                    number=None,
+                    message=None,
+                    action='unknown',
+                    outcome='unknown',
+                    target_type=None,
+                    target_class=None
+                )
+            out_dict = OrderedDict([
+                ("typeURI", "http://schemas.dmtf.org/cloud/audit/1.0/event"),
+                ("eventTime", self.formatted_time(row.time)),
+                ("eventType", "activity"),
+                ("action", msg_info.action),
+                ("outcome", msg_info.outcome),
+                ("reason", OrderedDict([
+                    ("reasonType", "HMC"),
+                    ("reasonCode", row.id),
+                ])),
+                ("observer", OrderedDict([
+                    ("id",  "TBD"),
+                    ("name", row.label),
+                ])),
+                ("x_message", OrderedDict([
+                    ("number", row.id),
+                    ("text", row.msg),
+                    ("variables", row.msg_vars),
+                ])),
+            ])
+            if row.user:
+                out_dict["initiator"] = OrderedDict([
+                    ("typeURI", "data/security/account/user"),
+                    ("name", row.user),
+                ])
+            if msg_info.target_type:
+                out_dict["target"] = OrderedDict([
+                    ("id", "TBD: HMC resource URI"),
+                    ("type", msg_info.target_type),
+                    ("name", "TBD: HMC resource name"),
+                ])
             out_str = json.dumps(out_dict, indent=CADF_JSON_INDENT)
         return out_str
 
@@ -1208,6 +1544,16 @@ def main():
         since = config.parms['since']
         future = config.parms['future']
 
+        log_message_file = config.parms['log_message_file']
+        if log_message_file:
+            if not os.path.isabs(log_message_file):
+                config_dir = os.path.dirname(args.config_file)
+                log_message_file = os.path.join(config_dir, log_message_file)
+            log_message_config = LogMessageConfig()
+            log_message_config.load_message_file(log_message_file)
+        else:
+            log_message_config = None
+
         if since == 'all':
             begin_time = None
             since_str = 'all'
@@ -1234,6 +1580,12 @@ def main():
             "{} starting".format(CMD_NAME))
         SELF_LOGGER.info(
             "{} version: {}".format(CMD_NAME, __version__))
+        SELF_LOGGER.info(
+            "Config file: {file}".
+            format(file=args.config_file))
+        SELF_LOGGER.info(
+            "HMC log message file for CADF: {file}".
+            format(file=log_message_file))
         SELF_LOGGER.info(
             "HMC: {host}, Userid: {user}, Label: {label}".
             format(host=hmc, user=userid, label=label))
@@ -1268,7 +1620,8 @@ def main():
                 format(name=name, logs=', '.join(logs), dest=dest_str,
                        format=format))
 
-            out_handler = OutputHandler(config.parms, fwd_parms)
+            out_handler = OutputHandler(
+                config.parms, log_message_config, fwd_parms)
             out_handlers.append(out_handler)
 
             for log in logs:

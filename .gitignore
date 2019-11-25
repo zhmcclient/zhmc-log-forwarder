@@ -11,7 +11,7 @@
 /ChangeLog
 /.pytest_cache/
 /try/
-/config/
+/.config/
 .DS_Store
 .ipynb_checkpoints/
 .coverage

@@ -1,0 +1,257 @@
+---
+# zhmc_log_forwarder HMC log message file
+#
+# This file defines information about HMC log messages that allows translating
+# an HMC log message received from the HMC into a CADF event.
+#
+# For a list of the possible HMC log messages, see the Help system of a real
+# HMC, in section "Introduction" -> "Audit, Event, and Security Log Messages".
+#
+# For the CADF standard DSP0262, see
+# https://www.dmtf.org/sites/default/files/standards/documents/DSP0262_1.0.0.pdf
+#
+# The data specified for each HMC log message in this file, is:
+# * number (string): event-id / number of HMC log message.
+# * message (string): message template of HMC log message.
+# * action (string): CADF action. See DSP0262 "CADF Action Taxonomy".
+# * outcome (string): CADF outcome. See DSP0262 "CADF Outcome Taxonomy".
+# * target_type (string): CADF typeURI of target resource. See DSP0262
+#   A.2 "CADF Resource Taxonomy".
+# * target_class (string): HMC resource class of target resource. See HMS WS
+#   API book, 'class' property of the data models. Example: 'partition'.
+#
+# See zhmc_log_forwarder --help-log-message-file for details.
+
+# HMC version to which this HMC log message file applies
+hmc_version: "2.14.1"
+
+# TODO: Add and classify the following messages:
+# 37    A logon occurred in service representative mode
+# 38    A logon occurred in product engineering mode
+# 40    A logoff occurred
+# 115   The {1} profile {0} was created
+# 116   The {1} profile {0} was changed
+# 117   The {1} profile {0} was upgraded
+# 118   The {1} profile {0} was deleted
+# 123   A logon occurred in operator mode
+# 124   A logon occurred in advanced operator mode
+# 125   A logon occurred in access administrator mode
+# 126   A logon occurred in system programmer mode
+# 136   Local unsuccessful logon detected
+# 137   Operations management unsuccessful logon detected
+# 138   Remote operations unsuccessful logon detected
+# 191   Local unsuccessful logon threshold exceeded
+# 192   Operations management unsuccessful logon threshold exceeded
+# 193   Remote operations unsuccessful logon threshold exceeded
+# 257   Logon by {0}
+# 258   Logoff
+# 363   DCAF attempt rejected: Bad password used
+# 787   Domain security name or password was changed on consoles: {0}
+# 859   There have been {0} consecutive failed logon attempts for user {1}
+# 864   Root password was updated
+# 948   A user password was changed
+# 1067  Domain security name or password was changed by console {0}
+# 1278  The password for user {0} has changed
+# 1324  User {0} has been disabled for {1} minutes because of too many invalid logon attempts
+# 1325  User {0} is no longer disabled from logging on
+# 5002  Crypto adapter passphrase logon with profile {0}
+# 5003  Crypto adapter group passphrase logon with profile {0}
+# 5004  Crypto adapter group member passphrase logon with member {0}
+# 5005  Crypto adapter smart card logon with profile {0}. Logon key ID: {1}. Card ID: {2}
+# 5006  Crypto adapter group smart card logon with profile {0}
+# 5007  Crypto adapter group member smart card logon with member {0}. Logon key ID: {1}
+# 5008  Crypto adapter logoff for profile {0}
+# 5012  Crypto adapter passphrase logon failure with profile {0}
+# 5013  Crypto adapter group passphrase logon failure with profile {0}
+# 5014  Crypto adapter group member passphrase logon failed for member {0}
+# 5015  Crypto adapter smart card logon failure with profile {0}. Card ID: {1}
+# 5016  Crypto Adapter Group Smart Card Logon Failure with Profile {0}
+# 5017  Crypto Adapter Group Member Smart Card Logon Failed for Member {0}
+# 5018  Crypto Adapter Logoff failed
+# 5019  Crypto Adapter Change Passphrase Failure with Profile {0}
+# 5200  A valid PIN was entered for {0} in {1}. Card ID: {2}, Zone ID: {3}
+# 5250  Failure during PIN entry for {0} in {1}. Card ID: {2}, Zone ID: {3}
+# 5251  Tried to access a {0} with a blocked PIN. Card ID: {1}, Zone ID: {2}, Operation: {3}
+# 5310  Host user ID {0} logged onto host {1} with mixed case password support set to {2}
+# 5311  Logoff host {0}
+# 5313  Host user ID {0} logged onto group {1} with mixed case password support set to {2}
+# 5410  User {0} logon failed for host {1} with mixed case password support set to {2}
+# 5412  User {0} logon failed for group {1} with mixed case password support set to {2}
+# 5780  A logon key pair was generated on {0} ({1})
+# 5781  A logon key pair generation failure occurred
+# 5809  Failure getting crypto adapter logon information.\nError Code: {0}
+# 5810  {0} PIN was set or changed on {1}. Card ID: {2}, Card description: {3}
+# 5811  Failed to set or change the PIN on {0}
+# 5812  The PIN was unblocked on {0}. Card ID: {1}, Card Description: {2}
+# 5813  Failure occurred unblocking {0} PIN
+
+# The HMC log messages that will be recognized by zhmc_log_forwarder
+messages:
+  -
+    number: '216'
+    message: "User {0} has logged on in {1} mode"
+    action: authenticate/logon
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '522'
+    message: "User {0} attempted to log on with a user identification or password that was not valid"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '687'
+    message: "User {0} was logged on automatically at the console"
+    action: authenticate/logon
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '756'
+    message: "User {0} logged off from a Platform Independent Remote Console (PIRC) at IP address {1}"
+    action: authenticate/logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '757'
+    message: "User {0} was logged off from a Platform Independent Remote Console (PIRC) at IP address {1} due to inactivity"
+    action: authenticate/forced_logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1279'
+    message: "User {0} has logged on"
+    action: authenticate/logon
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1280'
+    message: "User {0} has logged off"
+    action: authenticate/logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1283'
+    message: "{0} was forcibly disconnected by Hardware Management Console user {2} on {1}"
+    action: authenticate/forced_logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1284'
+    message: "User {0} of session {1} has forcibly disconnected user {2} of session {3} in order to log on locally"
+    action: authenticate/forced_logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1285'
+    message: "User {0} was not permitted to log on or reconnect since another user is already logged on"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '1286'
+    message: "User {0} was not permitted to log on since the userid is disabled"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '1287'
+    message: "User {0} was not permitted to log on since the userid is not allowed remote access"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '1340'
+    message: "An attempt for user {0} to log on failed"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '1408'
+    message: "User {0} has {logged on|reconnected} from {2} to session id {4}. The user's maximum role is {5}"
+    action: authenticate/logon
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1409'
+    message: "User {0} has {logged off|disconnected} from session id {2} for the reason: {3}"
+    action: authenticate/logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1410'
+    message: "User {0} of session {1} has forcibly {logged off|disconnected} user {3} of session {4}"
+    action: authenticate/forced_logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1691'
+    message: "User {0} has attempted to log on from location {1} with a user identification or password that was not valid. The user''s maximum role is {2}"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '1692'
+    message: "An attempt for user {0} to log on from location {1} failed"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '1941'
+    message: "User {0} has logged on to Web Services API session {1} from location {2}"
+    action: authenticate/logon
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '1942'
+    message: "User {0} has logged off from Web Services API session {1} due to {2}"
+    action: authenticate/logoff
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '2031'
+    message: "User {0} was not permitted to log on since the userid is disabled due to inactivity"
+    action: authenticate/logon
+    outcome: failed
+    target_type: service
+    target_class: console
+  -
+    number: '2033'
+    message: "The shared secret key for user {0} has been reset"
+    action: "TBD(Rene)"
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '2042'
+    message: "User {0} has logged on to BCPii API session {1} from source {2}"
+    action: authenticate/logon
+    outcome: success
+    target_type: service
+    target_class: console
+  -
+    number: '2043'
+    message: "User {0} has logged off from BCPii API session {1} due to {2}"
+    action: authenticate/logoff
+    outcome: success
+    target_type: service
+    target_class: console
