@@ -111,7 +111,22 @@ Quickstart
 
     Redirect that output into a file and edit that file as needed.
 
-3.  Start the ``zhmc_log_forwarder`` command as follows:
+3.  Optional: The zhmc_log_forwarder package includes a default HMC log
+    message file. That file is used when generating CADF output format and
+    defines how the HMC log messages are classified in the CADF output.
+    It is possible to specify your own HMC log message file using the
+    ``log_message_file`` parameter in the config file. When omitting this
+    parameter, or when setting it to ``null``, the default HMC log message
+    file included with the zhmc_log_forwarder package is used.
+
+    An example HMC log message file explaining its format is shown when
+    invoking:
+
+    .. code-block:: text
+
+        $ zhmc_log_forwarder --help-log-message-file
+
+4.  Start the ``zhmc_log_forwarder`` command as follows:
 
     .. code-block:: text
 
