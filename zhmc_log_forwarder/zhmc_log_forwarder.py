@@ -56,6 +56,9 @@ CADF_JSON_INDENT = None
 # Debug flag: Include full HMC log record in CADF output
 DEBUG_CADF_INCLUDE_FULL_RECORD = False
 
+# Debug flag: Output only unknown HMC log messages in CADF output
+DEBUG_CADF_ONLY_UNKNOWN = False
+
 
 try:
     textwrap.indent
@@ -1319,25 +1322,29 @@ class OutputHandler(object):
             dest_stream = getattr(sys, dest)
             for row in sorted_table:
                 out_str = self.out_str(row, console)
-                print(out_str, file=dest_stream)
-                dest_stream.flush()
+                if out_str:
+                    print(out_str, file=dest_stream)
+                    dest_stream.flush()
         else:
             assert dest == 'syslog'
             for row in sorted_table:
                 out_str = self.out_str(row, console)
-                try:
-                    self.logger.info(out_str)
-                except Exception as exc:
-                    raise ConnectionError(
-                        "Cannot write log entry to syslog server at "
-                        "{host}, port {port}/{porttype}: {msg}".
-                        format(host=self.syslog_host, port=self.syslog_port,
-                               porttype=self.syslog_porttype, msg=str(exc)))
+                if out_str:
+                    try:
+                        self.logger.info(out_str)
+                    except Exception as exc:
+                        raise ConnectionError(
+                            "Cannot write log entry to syslog server at "
+                            "{host}, port {port}/{porttype}: {msg}".
+                            format(host=self.syslog_host, port=self.syslog_port,
+                                   porttype=self.syslog_porttype, msg=str(exc)))
 
     def out_str(self, row, console):
         """
         Return an output string for the specified row that fits the specified
         output format.
+
+        If the row is not to be output, None is returned.
         """
         format = self.fwd_parms['format']
         if format == 'line':
@@ -1363,6 +1370,8 @@ class OutputHandler(object):
                     target_type=None,
                     target_class=None
                 )
+            if DEBUG_CADF_ONLY_UNKNOWN and msg_info.action != 'unknown':
+                return None
             msg_id = uuid.uuid4().urn.lstrip('urn:uuid:')
             out_dict = OrderedDict([
                 ("id", "zhmc_log_forwarder:{}".format(msg_id)),
