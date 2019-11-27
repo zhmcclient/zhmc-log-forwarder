@@ -84,14 +84,14 @@ messages:
   -
     number: '37'
     message: "A logon occurred in service representative mode"
-    action: authenticate/logon
+    action: authenticate/logon/service_representative_mode  # TODO: Is this GUI?
     outcome: success
     target_type: service
     target_class: console
   -
     number: '38'
     message: "A logon occurred in product engineering mode"
-    action: authenticate/logon
+    action: authenticate/logon/pemode  # TODO: Is this GUI?
     outcome: success
     target_type: service
     target_class: console
@@ -133,28 +133,28 @@ messages:
   -
     number: '123'
     message: "A logon occurred in operator mode"
-    action: authenticate/logon
+    action: authenticate/logon/operator_mode  # TODO: Is this GUI?
     outcome: success
     target_type: service
     target_class: console
   -
     number: '124'
     message: "A logon occurred in advanced operator mode"
-    action: authenticate/logon
+    action: authenticate/logon/advanced_operator_pmode  # TODO: Is this GUI?
     outcome: success
     target_type: service
     target_class: console
   -
     number: '125'
     message: "A logon occurred in access administrator mode"
-    action: authenticate/logon
+    action: authenticate/logon/access_administrator_mode  # TODO: Is this GUI?
     outcome: success
     target_type: service
     target_class: console
   -
     number: '126'
     message: "A logon occurred in system programmer mode"
-    action: authenticate/logon
+    action: authenticate/logon/system_programmer_mode  # TODO: Is this GUI?
     outcome: success
     target_type: service
     target_class: console
@@ -196,28 +196,28 @@ messages:
   -
     number: '191'
     message: "Local unsuccessful logon threshold exceeded"
-    action: authenticate/logon
+    action: authenticate/logon/threshold_exceeded  # TODO: Is this GUI?
     outcome: failed
     target_type: service
     target_class: console
   -
     number: '192'
     message: "Operations management unsuccessful logon threshold exceeded"
-    action: authenticate/logon
+    action: authenticate/logon/threshold_exceeded  # TODO: Is this GUI?
     outcome: failed
     target_type: service
     target_class: console
   -
     number: '193'
     message: "Remote operations unsuccessful logon threshold exceeded"
-    action: authenticate/logon
+    action: authenticate/logon/threshold_exceeded  # TODO: Is this GUI?
     outcome: failed
     target_type: service
     target_class: console
   -
     number: '216'
     message: "User {0} has logged on in {1} mode"
-    action: authenticate/logon
+    action: authenticate/logon  # TODO: Which modes does that indicate?
     outcome: success
     target_type: service
     target_class: console
@@ -322,7 +322,7 @@ messages:
   -
     number: '687'
     message: "User {0} was logged on automatically at the console"
-    action: authenticate/logon
+    action: authenticate/logon/auto
     outcome: success
     target_type: service
     target_class: console
@@ -378,7 +378,7 @@ messages:
   -
     number: '864'
     message: "Root password was updated"
-    action: update
+    action: unknown
     outcome: success
     target_type: TBD
     target_class: user
@@ -525,14 +525,14 @@ messages:
   -
     number: '1331'
     message: "The user {0} logged into the underlying console operating system platform"
-    action: authenticate/logon
+    action: authenticate/logon/console
     outcome: success
     target_type: service
     target_class: console
   -
     number: '1332'
     message: "The user {0} logged out of the underlying console operating system platform"
-    action: authenticate/logoff
+    action: authenticate/logoff/console
     outcome: success
     target_type: service
     target_class: console
@@ -573,7 +573,7 @@ messages:
     target_class: console
   -
     number: '1691'
-    message: "User {0} has attempted to log on from location {1} with a user identification or password that was not valid. The user''s maximum role is {2}"
+    message: "User {0} has attempted to log on from location {1} with a user identification or password that was not valid. The user's maximum role is {2}"
     action: authenticate/logon
     outcome: failed
     target_type: service
@@ -630,14 +630,14 @@ messages:
   -
     number: '1941'
     message: "User {0} has logged on to Web Services API session {1} from location {2}"
-    action: authenticate/logon
+    action: authenticate/logon/api
     outcome: success
     target_type: service
     target_class: console
   -
     number: '1942'
     message: "User {0} has logged off from Web Services API session {1} due to {2}"
-    action: authenticate/logoff
+    action: authenticate/logoff/api
     outcome: success
     target_type: service
     target_class: console
