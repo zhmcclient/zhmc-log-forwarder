@@ -929,22 +929,18 @@ Supported fields:
 
 * msg: The fully formatted log message, in English.
 
-* msg_vars: The substitution variables used in the log message, represented as
-  a list of items in the order of their index numbers. Each list item is
-  a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+* var_values: The list of values of the substitution variables for the log
+  message. The item number is the index into the list. Missing items are
+  represented with value None.
 
-  The substitution variables for each log message (including their index
+  The substitution variables for each log message (including their item
   numbers) are described in the help system of the HMC, in topic 'Introduction'
   -> 'Audit, Event, and Security Log Messages'.
 
-* detail_msgs: The list of fully formatted detail log messages, in English.
-  Detail messages are rarely present.
-
-* detail_msgs_vars: The substitution variables used in the detail log messages.
-  This is a list of items for each detail message in the same order as
-  in field 'detail_msgs', where each item is a list of substitution variables
-  used in the corresponding detail log message. Each item in that inner list
-  is a tuple of (value, type). Possible types are: 'long', 'float', 'string'.
+* var_types: The list of data type names of the substitution variables for the
+  log message. The item number is the index into the list. Missing items are
+  represented with value None. Possible data type names are: 'long', 'float',
+  'string'.
 
 Example:
 
@@ -1136,9 +1132,8 @@ class LogEntry(object):
     user_name = attr.attrib(type=str)  # Name of HMC userid for log entry
     user_id = attr.attrib(type=str)  # Object-ID of HMC userid for log entry
     msg = attr.attrib(type=str)  # Formatted message
-    msg_vars = attr.attrib(type=list)  # List of subst.vars in message
-    detail_msgs = attr.attrib(type=list)  # List of formatted detail messages
-    detail_msgs_vars = attr.attrib(type=list)  # List of list of subst.vars
+    var_values = attr.attrib(type=list)  # List of subst.var values in message
+    var_types = attr.attrib(type=list)  # List of subst.var types in message
     full_record = attr.attrib(type=dict)  # Dict with full HMC log record
 
 
@@ -1180,8 +1175,8 @@ class OutputHandler(object):
             try:
                 line_format.format(
                     time='test', label='test', log='test', name='test',
-                    id='test', user='test', msg='test', msg_vars='test',
-                    detail_msgs='test', detail_msgs_vars='test')
+                    id='test', user='test', msg='test', var_values='test',
+                    var_types='test')
             except KeyError as exc:
                 # KeyError is raised when the format string contains a named
                 # placeholder that is not provided in format().
@@ -1228,9 +1223,8 @@ class OutputHandler(object):
                 out_str = line_format.format(
                     time='Time', label=self.label_hdr, log='Log', name='Name',
                     id='ID', user='Userid', msg='Message',
-                    msg_vars='Message variables',
-                    detail_msgs='Detail messages',
-                    detail_msgs_vars='Detail messages variables')
+                    var_values='Variables',
+                    var_types='Variable types')
                 print(out_str, file=dest_stream)
                 print("-" * 120, file=dest_stream)
                 dest_stream.flush()
@@ -1301,21 +1295,36 @@ class OutputHandler(object):
             le_user_name = le['userid'] or ''
             le_user_id = le['user-uri'] or ''
             le_msg = le['event-message']
+
+            # Convert the data items into two index-correlated lists, for
+            # value and type. The logic tolerates missing and unsorted
+            # item numbers.
             data_items = le['event-data-items']
             data_items = sorted(data_items,
                                 key=lambda i: i['data-item-number'])
-            le_msg_vars = [(i['data-item-value'], i['data-item-type'])
-                           for i in data_items]
-            le_detail_msgs = []  # TODO: Implement detail messages
-            le_detail_msgs_vars = []  # TODO: Implement detail messages vars.
+            max_item_number = data_items[-1]['data-item-number']
+            le_var_values = []
+            le_var_types = []
+            di = 0
+            for i in range(0, max_item_number + 1):
+                data_item = data_items[di]
+                if i == data_item['data-item-number']:
+                    le_var_values.append(data_item['data-item-value'])
+                    le_var_types.append(data_item['data-item-type'])
+                    di += 1
+                else:
+                    # Item at this index is missing. This has not been
+                    # observed in any actual log messages so far.
+                    le_var_values.append(None)
+                    le_var_types.append(None)
+
             row = LogEntry(
                 time=le_time, label=self.label, log=le_log, name=le_name,
                 id=le_id, user_name=le_user_name, user_id=le_user_id,
-                msg=le_msg, msg_vars=le_msg_vars,
-                detail_msgs=le_detail_msgs,
-                detail_msgs_vars=le_detail_msgs_vars,
+                msg=le_msg, var_values=le_var_values, var_types=le_var_types,
                 full_record=le)
             table.append(row)
+
         sorted_table = sorted(table, key=lambda row: row.time)
 
         dest = self.fwd_parms['dest']
@@ -1353,9 +1362,8 @@ class OutputHandler(object):
             out_str = line_format.format(
                 time=self.formatted_time(row.time), label=row.label,
                 log=row.log, name=row.name, id=row.id, user=row.user_name,
-                msg=row.msg, msg_vars=row.msg_vars,
-                detail_msgs=row.detail_msgs,
-                detail_msgs_vars=row.detail_msgs_vars)
+                msg=row.msg, var_values=row.var_values,
+                var_types=row.var_types)
         else:
             assert format == 'cadf'
             assert isinstance(self.log_message_config, LogMessageConfig)
@@ -1391,15 +1399,35 @@ class OutputHandler(object):
                     ("number", row.id),
                     ("log", row.log),
                     ("text", row.msg),
-                    ("variables", row.msg_vars),
+                    ("var_values", row.var_values),
+                    ("var_types", row.var_types),
                 ])),
             ])
             if row.user_name:
-                out_dict["initiator"] = OrderedDict([
+                initiator = OrderedDict([
                     ("id", "hmc:{id}".format(id=row.user_id)),
                     ("typeURI", "data/security/account/user"),
                     ("name", row.user_name),
                 ])
+                # Try to find out initiator IP address
+                if row.id == '1941':
+                    initiator_address = row.var_values[2]
+                elif row.id == '1691':
+                    initiator_address = row.var_values[1]
+                elif row.id == '1692':
+                    initiator_address = row.var_values[1]
+                elif row.id == '1408':
+                    initiator_address = row.var_values[3]
+                else:
+                    initiator_address = "unknown"
+                if "console" in initiator_address:
+                    # e.g. "the console"
+                    initiator_address = "console"
+                if "unknown" in initiator_address:
+                    # e.g. "an unknown location"
+                    initiator_address = "unknown"
+                initiator["address"] = initiator_address
+                out_dict["initiator"] = initiator
             if msg_info.target_type:
                 if msg_info.target_class == 'console':
                     resource_id = "hmc:{id}".format(id=console.uri)
