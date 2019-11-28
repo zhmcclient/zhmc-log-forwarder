@@ -563,6 +563,7 @@ messages:
     outcome: success
     target_type: service
     target_class: console
+    initiator_address_item: 3
   -
     number: '1409'
     message: "User {0} has {logged off|disconnected} from session id {2} for the reason: {3}"
@@ -584,6 +585,7 @@ messages:
     outcome: failed
     target_type: service
     target_class: console
+    initiator_address_item: 1
   -
     number: '1692'
     message: "An attempt for user {0} to log on from location {1} failed"
@@ -591,6 +593,7 @@ messages:
     outcome: failed
     target_type: service
     target_class: console
+    initiator_address_item: 1
   -
     number: '1801'
     message: "The user template {0} was added"
@@ -640,6 +643,7 @@ messages:
     outcome: success
     target_type: service
     target_class: console
+    initiator_address_item: 2
   -
     number: '1942'
     message: "User {0} has logged off from Web Services API session {1} due to {2}"
@@ -717,6 +721,7 @@ messages:
     outcome: success
     target_type: service
     target_class: console
+    initiator_address_item: 2
   -
     number: '3319'
     message: "RC4 cipher support has been {0} by {1} logged on from location {2}"
@@ -724,6 +729,7 @@ messages:
     outcome: success
     target_type: service
     target_class: console
+    initiator_address_item: 2
   -
     number: '3320'
     message: "TLSv12 protocol support has been {0} by {1} logged on from location {2}"
@@ -731,6 +737,7 @@ messages:
     outcome: success
     target_type: service
     target_class: console
+    initiator_address_item: 2
   -
     number: '4051'
     message: "A device monitor event occurred; Device Type: {0}, Action: {1}, Vendor: {2}, Model: {3}, Serial: {4}"
@@ -969,6 +976,7 @@ messages:
     outcome: failed
     target_type: TBD
     target_class: "TBD:resource"
+    initiator_address_item: 0
   -
     number: '6052'
     message: "A web services client on {0} attempted an unauthorized ({1}) action '{2}' as {3} against the {4} object named '{5}': {6} (URI:{7})"
@@ -976,6 +984,7 @@ messages:
     outcome: failed
     target_type: TBD
     target_class: "TBD:resource"
+    initiator_address_item: 0
   -
     number: '6053'
     message: "A web services client on {0} attempted an unauthorized ({1}) action '{2}' as {3} against the {4} object named '{5}'. User does not have permission to the {6} named '{7}' (URI:{8})"
@@ -983,6 +992,7 @@ messages:
     outcome: failed
     target_type: TBD
     target_class: "TBD:resource"
+    initiator_address_item: 0
   -
     number: '6054'
     message: "A web services client on {0} attempted an unauthorized ({1}) action '{2}' as {3}. User does not have permission to the {4} named '{5}' (URI:{6})"
@@ -990,6 +1000,7 @@ messages:
     outcome: failed
     target_type: TBD
     target_class: "TBD:resource"
+    initiator_address_item: 0
   -
     number: '6055'
     message: "A web services client on {0} attempted an unauthorized ({1}) action '{2}' as {3}: {4} (URI:{5})"
@@ -997,6 +1008,7 @@ messages:
     outcome: failed
     target_type: TBD
     target_class: "TBD:resource"
+    initiator_address_item: 0
   -
     number: '6060'
     message: "A request was made by user {0} to change the Licensed Internal Code security mode from {1} to {2}"

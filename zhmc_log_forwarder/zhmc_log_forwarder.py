@@ -480,6 +480,18 @@ LOG_MESSAGE_FILE_SCHEMA = {
                             "partition"
                         ],
                     },
+                    "initiator_address_item": {
+                        "$id": "#/properties/messages/items/properties/"
+                        "initiator_address_item",
+                        "type": "integer",
+                        "title": "Item number of substitution variable in the "
+                        "message that is the initiator address. Default: None,"
+                        "meaning that the message does not have an initiator "
+                        "address.",
+                        "examples": [
+                            "10.11.12.13"
+                        ],
+                    },
                 },
             },
         }
@@ -611,7 +623,7 @@ class LogMessage(object):
     """
 
     def __init__(self, number, message, action, outcome, target_type,
-                 target_class):
+                 target_class, initiator_address_item):
 
         #: string: event-id / number of HMC log message
         self.number = number
@@ -635,6 +647,12 @@ class LogMessage(object):
         #: See HMS WS API book, 'class' property of the data models
         #: Example: 'partition'
         self.target_class = target_class
+
+        #: int: Item number of substitution variable in the message that is
+        #: the initiator address.
+        #: None means that the message does not have an initiator address.
+        #: Example: '10.11.12.13'
+        self.initiator_address_item = initiator_address_item
 
 
 class LogMessageConfig(dict):
@@ -727,7 +745,8 @@ class LogMessageConfig(dict):
                 action=m['action'],
                 outcome=m['outcome'],
                 target_type=m['target_type'],
-                target_class=m['target_class']
+                target_class=m['target_class'],
+                initiator_address_item=m.get('initiator_address_item', None)
             )
             self._messages[number] = m_obj
 
@@ -859,6 +878,9 @@ class HelpLogMessageFileAction(argparse.Action):
 #   A.2 "CADF Resource Taxonomy".
 # * target_class (string): HMC resource class of target resource. See HMS WS
 #   API book, 'class' property of the data models. Example: 'partition'.
+# * initiator_address_item (integer): Item number of substitution variable in
+#   the message that is the initiator IP address. None means that the message
+#   does not have an initiator address. Default: None.
 
 # HMC version to which this HMC log message file applies
 hmc_version: "2.14.1"
@@ -866,12 +888,20 @@ hmc_version: "2.14.1"
 # The HMC log messages that will be recognized by zhmc_log_forwarder
 messages:
   -
-    number: '216'
-    message: "User {0} has logged on in {1} mode"
-    action: authenticate
+    number: '1408'
+    message: "User {0} has logged on from location {3} ..."
+    action: authenticate/logon/gui
     outcome: success
     target_type: service
     target_class: console
+    initiator_address_item: 3
+  -
+    number: '1801'
+    message: "The user template {0} was added"
+    action: create
+    outcome: success
+    target_type: service
+    target_class: user_template
 """)
         sys.exit(2)
 
@@ -1299,24 +1329,25 @@ class OutputHandler(object):
             # Convert the data items into two index-correlated lists, for
             # value and type. The logic tolerates missing and unsorted
             # item numbers.
-            data_items = le['event-data-items']
-            data_items = sorted(data_items,
-                                key=lambda i: i['data-item-number'])
-            max_item_number = data_items[-1]['data-item-number']
             le_var_values = []
             le_var_types = []
-            di = 0
-            for i in range(0, max_item_number + 1):
-                data_item = data_items[di]
-                if i == data_item['data-item-number']:
-                    le_var_values.append(data_item['data-item-value'])
-                    le_var_types.append(data_item['data-item-type'])
-                    di += 1
-                else:
-                    # Item at this index is missing. This has not been
-                    # observed in any actual log messages so far.
-                    le_var_values.append(None)
-                    le_var_types.append(None)
+            data_items = le['event-data-items']
+            if data_items:
+                data_items = sorted(data_items,
+                                    key=lambda i: i['data-item-number'])
+                max_item_number = data_items[-1]['data-item-number']
+                di = 0
+                for i in range(0, max_item_number + 1):
+                    data_item = data_items[di]
+                    if i == data_item['data-item-number']:
+                        le_var_values.append(data_item['data-item-value'])
+                        le_var_types.append(data_item['data-item-type'])
+                        di += 1
+                    else:
+                        # Item at this index is missing. This has not been
+                        # observed in any actual log messages so far.
+                        le_var_values.append(None)
+                        le_var_types.append(None)
 
             row = LogEntry(
                 time=le_time, label=self.label, log=le_log, name=le_name,
@@ -1377,7 +1408,8 @@ class OutputHandler(object):
                     action='unknown',
                     outcome='unknown',
                     target_type=None,
-                    target_class=None
+                    target_class=None,
+                    initiator_address_item=None,
                 )
             if DEBUG_CADF_ONLY_UNKNOWN and msg_info.action != 'unknown':
                 return None
@@ -1410,16 +1442,11 @@ class OutputHandler(object):
                     ("name", row.user_name),
                 ])
                 # Try to find out initiator IP address
-                if row.id == '1941':
-                    initiator_address = row.var_values[2]
-                elif row.id == '1691':
-                    initiator_address = row.var_values[1]
-                elif row.id == '1692':
-                    initiator_address = row.var_values[1]
-                elif row.id == '1408':
-                    initiator_address = row.var_values[3]
-                else:
+                ix = msg_info.initiator_address_item
+                if ix is None:
                     initiator_address = "unknown"
+                else:
+                    initiator_address = row.var_values[ix]
                 if "console" in initiator_address:
                     # e.g. "the console"
                     initiator_address = "console"
