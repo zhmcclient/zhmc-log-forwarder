@@ -559,7 +559,7 @@ messages:
     message: "User {0} has {logged on|reconnected} from location {3} to session id {4}. The user's maximum role is {6}"
     # Note: The message shown above is the actual message from a z14.
     #       The help definition for that message on that z14 is slightly different.
-    action: authenticate/logon
+    action: authenticate/logon/gui
     outcome: success
     target_type: service
     target_class: console
@@ -567,7 +567,7 @@ messages:
   -
     number: '1409'
     message: "User {0} has {logged off|disconnected} from session id {2} for the reason: {3}"
-    action: authenticate/logoff
+    action: authenticate/logoff/gui
     outcome: success
     target_type: service
     target_class: console
