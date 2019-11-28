@@ -980,6 +980,7 @@ The following is an example log record in 'cadf' output format:
     },
     "x_message": {
         "number": "1941",
+        "log": "security",
         "text": "User zbcInstall has logged on to Web Services API ...",
         "variables": [
             [
@@ -1388,6 +1389,7 @@ class OutputHandler(object):
                 ])),
                 ("x_message", OrderedDict([
                     ("number", row.id),
+                    ("log", row.log),
                     ("text", row.msg),
                     ("variables", row.msg_vars),
                 ])),
