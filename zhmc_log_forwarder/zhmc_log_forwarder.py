@@ -388,15 +388,16 @@ CONFIG_FILE_SCHEMA = {
                         "$id": "#/properties/forwardings/items/"
                         "properties/line_format",
                         "type": "string",
-                        "title": "Message format for 'line' output format, "
-                        "as a Python new-style format string. "
-                        "Invoke with --help-format-line for "
-                        "details on the fields.",
+                        "title": "Message format for 'line' and 'cadf' output "
+                        "formats, as a Python new-style format string. "
+                        "Invoke with --help-format-line or --help-format-cadf "
+                        "for details on the fields.",
                         "default": "{time:32} {label} {log:8} {name:12} "
                         "{id:>4} {user:20} {msg}",
                         "examples": [
-                            "{time:32} {label} {log:8} {name:12} {id:>4} "
-                            "{user:20} {msg}"
+                            "line format: {time:32} {label} {log:8} {name:12} "
+                            "{id:>4} {user:20} {msg}"
+                            "cadf format: {time} {cadf}"
                         ],
                     },
                     "time_format": {
@@ -889,14 +890,20 @@ forwardings:
     # - 'cadf': CADF format as a JSON string
     format: line
 
-    # Format for 'line' output format, as a Python new-style format string.
-    # Invoke with --help-format-line for details.
+    # Format for 'line' and 'cadf' output formats, as a Python new-style format
+    # string. Invoke with --help-format-line or --help-format-cadf for details.
+    # Typical setting for 'line' format:
     line_format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
+    # Typical setting for 'cadf' format:
+    # line_format: '{time} {cadf}'
 
     # Format for the 'time' field in the log message, as a Python
     # datetime.strftime() format string.
     # Invoke with --help-time-format for details.
-    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+    # Typical setting for 'line' format:
+    time_format: 'iso8601'
+    # Typical setting for 'cadf' format:
+    # time_format: 'syslog'
 """)
         sys.exit(2)
 
@@ -1030,14 +1037,33 @@ class HelpFormatCADFAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         print("""
-For output format 'cadf', each log record is formatted as a JSON string
-that conforms to the CADF standard (DMTF standard DSP0262).
+For output format 'cadf', each log record is formatted as a single line whose
+content is defined in the 'line_format' parameter in the config file.
 
-The indentation of the produced JSON, including whether it should be on a
-single line, can be controlled with the CADF_JSON_INDENT global variable.
+The value of that config parameter is a Python new-style format string, using
+predefined names for the fields of the log message.
 
-The following is an example log record in 'cadf' output format:
+While the fields can be arbitrarily selected and ordered in the format string,
+the format string that should be used is:
 
+    {time} {cadf}
+
+Supported fields:
+
+* time: The time stamp of the log entry, as reported by the HMC in the log
+  entry data. This is the time stamp that is also shown in the HMC GUI.
+  The format of this field is defined in the 'time_format' parameter in the
+  config file.
+  Invoke with --help-time-format for details.
+
+* cadf: The single-line JSON string that conforms to the CADF standard
+  (DMTF standard DSP0262).
+
+The following is an example log record in 'cadf' output format. For ease of
+reading, the JSOn string has been formatted across multiple lines. In the
+actual record that is sent, it will be all on a single line:
+
+Nov 25 18:06:37
 {
     "id": "zhmc_log_forwarder:e3c43ae3-037b-4b64-9721-3242ea94c9e7",
     "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
@@ -1106,6 +1132,7 @@ datetime.strftime() format string, or alternatively the following keywords:
   e.g. 2019-08-09T12:46:38.550000+02:00
 - iso8601b: ISO 8601 format with ' ' as delimiter,
   e.g. 2019-08-09 12:46:38.550000+02:00
+- syslog: Syslog time format, e.g. Nov 25 18:06:37
 - Any other value is interpreted as datetime.strftime() format string.
 
 The format for the 'asctime' field in any self-logged messages is defined in
@@ -1282,23 +1309,25 @@ class OutputHandler(object):
 
         # Check validity of the time_format string:
         dt = datetime.now()
+        time_format = self.fwd_parms['time_format']
         try:
-            self.formatted_time(dt)
+            self.formatted_time(dt, time_format)
         except UnicodeError as exc:
             raise UserError(
                 "Config parameter 'time_format' is invalid: {}".
                 format(str(exc)))
 
-    def formatted_time(self, dt):
+    def formatted_time(self, dt, time_format):
         """
         Return a string that is the formatted input time `dt`, using the
         time format specified in the 'time_format' field.
         """
-        time_format = self.fwd_parms['time_format']
         if time_format == 'iso8601':
             return dt.isoformat()
         if time_format == 'iso8601b':
             return dt.isoformat(' ')
+        if time_format == 'syslog':
+            time_format = '%b %d %H:%M:%S'
         return dt.strftime(time_format)  # already checked in __init__()
 
     def output_begin(self):
@@ -1453,10 +1482,12 @@ class OutputHandler(object):
         If the row is not to be output, None is returned.
         """
         format = self.fwd_parms['format']
+        time_format = self.fwd_parms['time_format']
         if format == 'line':
             line_format = self.fwd_parms['line_format']
             out_str = line_format.format(
-                time=self.formatted_time(row.time), label=row.label,
+                time=self.formatted_time(row.time, time_format),
+                label=row.label,
                 log=row.log, name=row.name, id=row.id, user=row.user_name,
                 msg=row.msg, var_values=row.var_values,
                 var_types=row.var_types)
@@ -1482,7 +1513,7 @@ class OutputHandler(object):
             out_dict = OrderedDict([
                 ("id", "zhmc_log_forwarder:{}".format(msg_id)),
                 ("typeURI", "http://schemas.dmtf.org/cloud/audit/1.0/event"),
-                ("eventTime", self.formatted_time(row.time)),
+                ("eventTime", self.formatted_time(row.time, 'iso8601')),
                 ("eventType", "activity"),
                 ("action", msg_info.action),
                 ("outcome", msg_info.outcome),
@@ -1538,7 +1569,11 @@ class OutputHandler(object):
                 ])
             if DEBUG_CADF_INCLUDE_FULL_RECORD:
                 out_dict["x_full_record"] = row.full_record
-            out_str = json.dumps(out_dict, indent=CADF_JSON_INDENT)
+            cadf_str = json.dumps(out_dict, indent=CADF_JSON_INDENT)
+            line_format = self.fwd_parms['line_format']
+            out_str = line_format.format(
+                time=self.formatted_time(row.time, time_format),
+                cadf=cadf_str)
         return out_str
 
 
