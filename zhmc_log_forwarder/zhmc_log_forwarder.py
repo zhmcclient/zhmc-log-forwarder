@@ -215,6 +215,42 @@ CONFIG_FILE_SCHEMA = {
                 "zhmc_log_messages.yml"
             ],
         },
+        "check_data": {
+            "$id": "#/properties/check_data",
+            "type": "object",
+            "title": "Data items for additional checks.",
+            "default": {},
+            "required": [
+            ],
+            "additionalProperties": False,
+            "properties": {
+                "imgmt_subnet": {
+                    "$id": "#/properties/check_data/properties/"
+                    "imgmt_subnet",
+                    "type": ["string", "null"],
+                    "title": "Subnet of the IMGMT network, in CIDR notation.",
+                    "default": None,
+                    "examples": [
+                        "172.16.192.0/24"
+                    ],
+                },
+                "functional_users": {
+                    "$id": "#/properties/check_data/properties/"
+                    "functional_users",
+                    "type": "array",
+                    "title": "List of functional userids.",
+                    "default": [],
+                    "examples": [
+                        "[ zaasmoni, zaasauto ]"
+                    ],
+                    "items": {
+                        "$id": "#/properties/check_data/properties/"
+                        "functional_users/items",
+                        "type": "string",
+                    },
+                },
+            },
+        },
         "forwardings": {
             "$id": "#/properties/forwardings",
             "type": "array",
@@ -806,6 +842,17 @@ selflog_time_format: '%Y-%m-%d %H:%M:%S.%f%z'
 # provided with the zhmc_log_forwarder package to be used.
 log_message_file: null
 
+# Check data to be included in the generated CADF log records.
+check_data:
+
+  # Subnet of the IMGMT network of the pod, in CIDR notation
+  imgmt_subnet: 172.16.192.0/24
+
+  # List of functional users of the pod
+  functional_users:
+    - zaasmoni
+    - zaasauto
+
 # List of log forwardings. A log forwarding mainly defines a set of logs to
 # collect, and a destination to forward them to.
 forwardings:
@@ -1023,6 +1070,13 @@ The following is an example log record in 'cadf' output format:
             ]
         ]
     },
+    "x_check_data": {
+        "imgmt_subnet": "172.16.192.0/24",
+        "functional_users": [
+            "zaasmoni",
+            "zaasauto"
+        ]
+    },
     "initiator": {
         "id": "hmc:/api/users/1c114a6a-dba3-11e8-8643-00106f237ab1",
         "typeURI": "data/security/account/user",
@@ -1188,6 +1242,17 @@ class OutputHandler(object):
         self.config_parms = config_parms
         self.log_message_config = log_message_config
         self.fwd_parms = fwd_parms
+
+        check_data_schema_props = CONFIG_FILE_SCHEMA['properties'] \
+            ['check_data']['properties']
+        check_data = self.config_parms.get('check_data', OrderedDict())
+        if 'imgmt_subnet' not in check_data:
+            check_data['imgmt_subnet'] = check_data_schema_props \
+                ['imgmt_subnet']['default']
+        if 'functional_users' not in check_data:
+            check_data['functional_users'] = check_data_schema_props \
+                ['functional_users']['default']
+        self.check_data = check_data
 
         self.logger = None
 
@@ -1434,6 +1499,7 @@ class OutputHandler(object):
                     ("var_values", row.var_values),
                     ("var_types", row.var_types),
                 ])),
+                ("x_check_data", self.check_data),
             ])
             if row.user_name:
                 initiator = OrderedDict([
