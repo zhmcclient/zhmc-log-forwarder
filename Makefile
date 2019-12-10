@@ -63,9 +63,9 @@ package_name_under := zhmc_log_forwarder
 # Name of top level Python namespace
 module_name := zhmc_log_forwarder
 
-# Package version (full version, including any pre-release suffixes, e.g. "0.1.0-alpha1")
-# May end up being empty, if pbr cannot determine the version.
-package_version := $(shell $(PYTHON_CMD) -c "$$(printf 'try:\n from pbr.version import VersionInfo\nexcept ImportError:\n pass\nelse:\n print(VersionInfo(\042$(package_name)\042).release_string())\n')")
+# Package version (full version, including any pre-release suffixes, e.g. "0.1.0.dev1")
+# Note: The package version is defined in zhmc_log_forwarder/version.py.
+package_version := $(shell $(PYTHON_CMD) setup.py --version)
 
 # Python major version
 python_major_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s'%sys.version_info[0])")
@@ -119,7 +119,7 @@ test_py_files := \
 pytest_no_log_opt := $(shell py.test --help 2>/dev/null |grep '\--no-print-logs' >/dev/null; if [ $$? -eq 0 ]; then echo '--no-print-logs'; else echo ''; fi)
 
 # Flake8 config file
-flake8_rc_file := setup.cfg
+flake8_rc_file := .flake8
 
 # PyLint config file
 pylint_rc_file := .pylintrc
@@ -141,7 +141,7 @@ build_files := $(bdist_file) $(sdist_file)
 
 # Files the distribution archive depends upon.
 dist_dependent_files := \
-    setup.py setup.cfg \
+    setup.py \
     README.rst \
     requirements.txt \
     $(package_py_files) \
@@ -254,16 +254,13 @@ pyshow:
 .PHONY: _check_version
 _check_version:
 ifeq (,$(package_version))
-	@echo 'Error: Package version could not be determined: (requires pbr; run "make develop")'
-	@false
-else
-	@true
+	$(error Package version could not be determined)
 endif
 
 pip_$(python_version_fn).done:
 	rm -fv $@
-	@echo 'Installing/upgrading pip, setuptools, wheel and pbr with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel pbr
+	@echo 'Installing/upgrading pip, setuptools and wheel with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel
 	touch $@
 
 develop_$(python_version_fn).done: pip_$(python_version_fn).done dev-requirements.txt requirements.txt
@@ -273,7 +270,7 @@ develop_$(python_version_fn).done: pip_$(python_version_fn).done dev-requirement
 	touch $@
 	@echo 'Done: Installed runtime and development requirements'
 
-install_$(python_version_fn).done: pip_$(python_version_fn).done requirements.txt setup.py setup.cfg $(package_py_files)
+install_$(python_version_fn).done: pip_$(python_version_fn).done requirements.txt setup.py $(package_py_files)
 	rm -fv $@
 	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt

@@ -33,17 +33,16 @@ import json
 import jsonschema
 
 import attr
-import pbr
 import yaml
 import requests.packages.urllib3
 from dateutil import parser as dateutil_parser
 from dateutil import tz as dateutil_tz
 import zhmcclient
 
+from .version import __version__
 
 CMD_NAME = 'zhmc_log_forwarder'
 PACKAGE_NAME = 'zhmc-log-forwarder'
-__version__ = pbr.version.VersionInfo(PACKAGE_NAME).release_string()
 BLANKED_SECRET = '********'
 
 DEST_LOGGER_NAME = CMD_NAME + '_dest'
@@ -1270,16 +1269,13 @@ class OutputHandler(object):
         self.log_message_config = log_message_config
         self.fwd_parms = fwd_parms
 
-        check_data_schema_props = CONFIG_FILE_SCHEMA['properties'] \
-            ['check_data']['properties']
-        check_data = self.config_parms.get('check_data', OrderedDict())
-        if 'imgmt_subnet' not in check_data:
-            check_data['imgmt_subnet'] = check_data_schema_props \
-                ['imgmt_subnet']['default']
-        if 'functional_users' not in check_data:
-            check_data['functional_users'] = check_data_schema_props \
-                ['functional_users']['default']
-        self.check_data = check_data
+        props = CONFIG_FILE_SCHEMA['properties']['check_data']['properties']
+        data = self.config_parms.get('check_data', OrderedDict())
+        if 'imgmt_subnet' not in data:
+            data['imgmt_subnet'] = props['imgmt_subnet']['default']
+        if 'functional_users' not in data:
+            data['functional_users'] = props['functional_users']['default']
+        self.check_data = data
 
         self.logger = None
 
