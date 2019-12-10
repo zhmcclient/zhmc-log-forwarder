@@ -229,15 +229,15 @@ uninstall:
 	@echo '$@ done.'
 
 .PHONY: clobber
-clobber: uninstall clean
+clobber: clean
 	rm -Rf $(doc_build_dir) htmlcov .tox
-	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file) *.done
+	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file) *.done $(dist_dir)/$(package_name)-$(package_version)*.egg
 	@echo 'Done: Removed all build products to get to a fresh state.'
 	@echo '$@ done.'
 
 .PHONY: clean
 clean:
-	rm -Rf build .cache $(package_name).egg-info .eggs
+	rm -Rf build .cache $(package_name_under).egg-info .eggs
 	rm -f MANIFEST MANIFEST.in AUTHORS ChangeLog .coverage
 	find . -name "*.pyc" -delete -o -name "__pycache__" -delete -o -name "*.tmp" -delete -o -name "tmp_*" -delete
 	@echo 'Done: Cleaned out all temporary files.'
