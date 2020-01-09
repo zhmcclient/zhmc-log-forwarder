@@ -52,6 +52,9 @@ SELF_LOGGER = None  # Will be initialized in main()
 # Indent for JSON output to CADF (None=oneline)
 CADF_JSON_INDENT = None
 
+# Flag controlling whether optional CADF items are always generated
+CADF_ALWAYS_INCLUDE_OPTIONAL_ITEMS = True
+
 # Debug flag: Include full HMC log record in CADF output
 DEBUG_CADF_INCLUDE_FULL_RECORD = False
 
@@ -1512,6 +1515,8 @@ class OutputHandler(object):
                 ("eventTime", self.formatted_time(row.time, 'iso8601')),
                 ("eventType", "activity"),
                 ("action", msg_info.action),
+                ("x_eventCategory", "activity/" + msg_info.action),
+                ("x_eventType", "zhmc" + row.id),
                 ("outcome", msg_info.outcome),
                 ("observer", OrderedDict([
                     ("id", "hmc:{id}".format(id=console.uri)),
@@ -1528,7 +1533,7 @@ class OutputHandler(object):
                 ])),
                 ("x_check_data", self.check_data),
             ])
-            if row.user_name:
+            if row.user_name or CADF_ALWAYS_INCLUDE_OPTIONAL_ITEMS:
                 initiator = OrderedDict([
                     ("id", "hmc:{id}".format(id=row.user_id)),
                     ("typeURI", "data/security/account/user"),
@@ -1548,7 +1553,7 @@ class OutputHandler(object):
                     initiator_address = "unknown"
                 initiator["address"] = initiator_address
                 out_dict["initiator"] = initiator
-            if msg_info.target_type:
+            if msg_info.target_type or CADF_ALWAYS_INCLUDE_OPTIONAL_ITEMS:
                 if msg_info.target_class == 'console':
                     resource_id = "hmc:{id}".format(id=console.uri)
                     resource_name = console.name
