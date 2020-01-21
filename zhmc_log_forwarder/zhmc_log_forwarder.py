@@ -897,10 +897,11 @@ forwardings:
     # Typical setting for 'line' format:
     line_format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
     # Typical setting for 'cadf' format:
-    # line_format: '{time} {cadf}'
+    # line_format: '{time} {label} {cadf}'
 
     # Format for the 'time' field in the log message, as a Python
-    # datetime.strftime() format string.
+    # datetime.strftime() format string, or one of: 'iso8601', 'iso8601b',
+    # or 'syslog'.
     # Invoke with --help-time-format for details.
     # Typical setting for 'line' format:
     time_format: 'iso8601'
@@ -1048,7 +1049,7 @@ predefined names for the fields of the log message.
 While the fields can be arbitrarily selected and ordered in the format string,
 the format string that should be used is:
 
-    {time} {cadf}
+    {time} {label} {cadf}
 
 Supported fields:
 
@@ -1058,14 +1059,17 @@ Supported fields:
   config file.
   Invoke with --help-time-format for details.
 
+* label: The label for the HMC that was specified in the 'label' config
+  parameter.
+
 * cadf: The single-line JSON string that conforms to the CADF standard
   (DMTF standard DSP0262).
 
 The following is an example log record in 'cadf' output format. For ease of
-reading, the JSOn string has been formatted across multiple lines. In the
+reading, the JSON string has been formatted across multiple lines. In the
 actual record that is sent, it will be all on a single line:
 
-Nov 25 18:06:37
+Nov 25 18:06:37 wdc04-05.HMC1
 {
     "id": "zhmc_log_forwarder:e3c43ae3-037b-4b64-9721-3242ea94c9e7",
     "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
@@ -1574,6 +1578,7 @@ class OutputHandler(object):
             line_format = self.fwd_parms['line_format']
             out_str = line_format.format(
                 time=self.formatted_time(row.time, time_format),
+                label=row.label,
                 cadf=cadf_str)
         return out_str
 

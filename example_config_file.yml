@@ -76,11 +76,18 @@ forwardings:
     # - 'cadf': CADF format as a JSON string
     format: line
 
-    # Format for 'line' output format, as a Python new-style format string.
-    # Invoke with --help-format-line for details.
+    # Format for 'line' and 'cadf' output formats, as a Python new-style format
+    # string. Invoke with --help-format-line or --help-format-cadf for details.
+    # Typical setting for 'line' format:
     line_format: '{time:32} {label} {log:8} {name:12} {id:>4} {user:20} {msg}'
+    # Typical setting for 'cadf' format:
+    # line_format: '{time} {label} {cadf}'
 
     # Format for the 'time' field in the log message, as a Python
-    # datetime.strftime() format string.
+    # datetime.strftime() format string, or one of: 'iso8601', 'iso8601b',
+    # or 'syslog'.
     # Invoke with --help-time-format for details.
-    time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+    # Typical setting for 'line' format:
+    time_format: 'iso8601'
+    # Typical setting for 'cadf' format:
+    # time_format: 'syslog'
