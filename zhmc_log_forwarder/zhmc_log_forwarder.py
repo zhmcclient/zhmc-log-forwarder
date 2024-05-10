@@ -22,6 +22,7 @@ import sys
 import os
 import argparse
 from datetime import datetime
+import time
 from collections import OrderedDict
 import textwrap
 import logging
@@ -145,6 +146,109 @@ CONFIG_FILE_SCHEMA = {
                 "mycerts/ca.pem"
                 "mycerts_dir"
             ],
+        },
+        "stomp_retry_timeout_config": {
+            "type": "object",
+            "title": "STOMP retry timeout configuration",
+            "additionalProperties": False,
+            "properties": {
+                "connect_timeout": {
+                    "type": ["number", "null"],
+                    "title": "STOMP connect timeout in seconds. "
+                        "This timeout applies to making a connection at the "
+                        "socket level. "
+                        "The special value 0 means that no timeout is set. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_CONNECT_TIMEOUT.",
+                },
+                "connect_retries": {
+                    "type": ["integer", "null"],
+                    "title": "Number of retries (after the initial attempt) "
+                        "for STOMP connection-related issues. These retries "
+                        "are performed for failed DNS lookups, failed socket "
+                        "connections, and socket connection timeouts. "
+                        "The special value -1 means that there are infinite "
+                        "retries. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_CONNECT_RETRIES.",
+                },
+                "reconnect_sleep_initial": {
+                    "type": ["number", "null"],
+                    "title": "Initial STOMP reconnect sleep delay in seconds. "
+                        "The reconnect sleep delay is the time to wait before "
+                        "reconnecting. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_RECONNECT_SLEEP_INITIAL.",
+                },
+                "reconnect_sleep_increase": {
+                    "type": ["number", "null"],
+                    "title": "Factor by which the reconnect sleep delay is "
+                        "increased after each connection attempt. "
+                        "For example, 0.5 means to wait 50% longer than before "
+                        "the previous attempt, 1.0 means wait twice as long, "
+                        "and 0 means keep the delay constant. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_RECONNECT_SLEEP_INCREASE.",
+                },
+                "reconnect_sleep_max": {
+                    "type": ["number", "null"],
+                    "title": "Maximum reconnect sleep delay in seconds, "
+                        "regardless of the 'reconnect_sleep_increase' value. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_RECONNECT_SLEEP_MAX.",
+                },
+                "reconnect_sleep_jitter": {
+                    "type": ["number", "null"],
+                    "title": "Random additional time to wait before a "
+                        "reconnect to avoid stampeding, as a percentage of the "
+                        "current reconnect sleep delay. "
+                        "For example, a value of 0.1 means to wait an extra "
+                        "0%-10% of the delay calculated using the previous "
+                        "three parameters. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_RECONNECT_SLEEP_JITTER.",
+                },
+                "keepalive": {
+                    "type": ["boolean", "null"],
+                    "title": "Enable keepalive at the socket level. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_KEEPALIVE.",
+                },
+                "heartbeat_send_cycle": {
+                    "type": ["number", "null"],
+                    "title": "Cycle time in which the client will send "
+                        "heartbeats to the HMC, in seconds. "
+                        "The special value 0 disables the sending of "
+                        "heartbeats to the HMC. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_HEARTBEAT_SEND_CYCLE.",
+                },
+                "heartbeat_receive_cycle": {
+                    "type": ["number", "null"],
+                    "title": "Cycle time in which the HMC will send "
+                        "heartbeats to the client, in seconds. "
+                        "The cycle time for the client "
+                        "to check the receipt of these heartbeats is that "
+                        "time times (1 + 'heartbeat_receive_check'). "
+                        "The special value 0 disables heartbeat sending by "
+                        "the HMC and checking on the cient side. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_HEARTBEAT_RECEIVE_CYCLE.",
+                },
+                "heartbeat_receive_check": {
+                    "type": ["number", "null"],
+                    "title": "Additional time for checking the heartbeats "
+                        "received from the HMC on the client, as a percentage "
+                        "of the 'heartbeat_receive_cycle' time. For example, "
+                        "a value of 0.5 means to wait an extra 50% of the "
+                        "'heartbeat_receive_cycle' time. Note that the "
+                        "corresponding stomp.py parameter is "
+                        "'heart_beat_receive_scale' which is defined as a "
+                        "factor. "
+                        "The null value will use the default defined in "
+                        "zhmcclient.DEFAULT_STOMP_HEARTBEAT_RECEIVE_CHECK.",
+                },
+            },
         },
         "label": {
             "$id": "#/properties/label",
@@ -827,6 +931,22 @@ hmc_password: mypassword
 # - false: Disable CA certificate validation.
 # - str: Path to CA PEM file or CA directory (with c_rehash links).
 hmc_verify_cert: mycerts/ca.pem
+
+# STOMP retry/timeout configuration.
+# null means to use the zhmcclient defaults.
+# For a description, see
+# https://python-zhmcclient.readthedocs.io/en/latest/notifications.html#zhmcclient.StompRetryTimeoutConfig
+stomp_retry_timeout_config:
+  connect_timeout: null
+  connect_retries: null
+  reconnect_sleep_initial: null
+  reconnect_sleep_increase: null
+  reconnect_sleep_max: null
+  reconnect_sleep_jitter: null
+  keepalive: null
+  heartbeat_send_cycle: null
+  heartbeat_receive_cycle: null
+  heartbeat_receive_check: null
 
 # Label for the HMC to be used in the log message (as field 'label').
 label: myregion-myzone-myhmc
@@ -1704,6 +1824,25 @@ class SelfLogger(object):
         self._logger.error(msg)
 
 
+def zhmcclient_log_setup(logger_name, dest, format, time_format, debug):
+    """
+    Set up the zhmcclient loggers.
+    """
+    formatter = DatetimeFormatter(
+        fmt=format, datefmt=time_format)
+    if dest == 'stdout':
+        dest_stream = sys.stdout
+    else:
+        assert dest == 'stderr'
+        dest_stream = sys.stderr
+    handler = StreamHandler(dest_stream)
+    handler.setFormatter(formatter)
+    logger = logging.getLogger(logger_name)
+    logger.addHandler(handler)
+    log_level = logging.DEBUG if debug else logging.INFO
+    logger.setLevel(log_level)
+
+
 def get_log_entries(logs, console, begin_time, end_time):
     """
     Retrieve the desired types of log entries for a specified time range from
@@ -1753,8 +1892,18 @@ def main():
             time_format=config.parms['selflog_time_format'],
             debug=args.debug)
 
+        zhmcclient_log_setup(
+            logger_name=zhmcclient.JMS_LOGGER_NAME,
+            dest=config.parms['selflog_dest'],
+            format=config.parms['selflog_format'],
+            time_format=config.parms['selflog_time_format'],
+            debug=args.debug)
+
         # SELF_LOGGER.debug("Effective config with defaults: {!r}".
         #                   format(config))
+
+        stomp_rt_config = zhmcclient.StompRetryTimeoutConfig(
+            **config.parms['stomp_retry_timeout_config'])
 
         hmc = config.parms['hmc_host']
         userid = config.parms['hmc_user']
@@ -1852,7 +2001,7 @@ def main():
             "Collecting these logs altogether: {logs}".
             format(logs=', '.join(all_logs)))
 
-        if 'StompException' not in globals():
+        if 'StompException' not in locals():
             # pylint: disable=import-outside-toplevel
             from stomp.exception import StompException
 
@@ -1889,7 +2038,8 @@ def main():
                 if topic_names:
                     try:
                         receiver = zhmcclient.NotificationReceiver(
-                            topic_names, hmc, userid, password)
+                            topic_names, hmc, userid, password,
+                            stomp_rt_config=stomp_rt_config)
                     except StompException as exc:
                         SELF_LOGGER.error(
                             "Cannot create notification receiver: {}: {}".
@@ -1900,36 +2050,48 @@ def main():
                         SELF_LOGGER.info(
                             "Starting to wait for future log entries")
                         while True:
-                            for headers, message in receiver.notifications():
-                                if headers['notification-type'] == 'log-entry':
-                                    topic_name = headers['destination']. \
-                                        split('/')[-1]
-                                    if topic_name == security_topic_name:
-                                        log_entries = message['log-entries']
-                                        for le in log_entries:
-                                            le['log-type'] = 'security'
-                                        for hdlr in out_handlers:
-                                            hdlr.output_entries(
-                                                log_entries, console)
-                                    elif topic_name == audit_topic_name:
-                                        log_entries = message['log-entries']
-                                        for le in log_entries:
-                                            le['log-type'] = 'audit'
-                                        for hdlr in out_handlers:
-                                            hdlr.output_entries(
-                                                log_entries, console)
+                            try:
+                                for headers, message in receiver.notifications():
+                                    if headers['notification-type'] == 'log-entry':
+                                        topic_name = headers['destination']. \
+                                            split('/')[-1]
+                                        if topic_name == security_topic_name:
+                                            log_entries = message['log-entries']
+                                            for le in log_entries:
+                                                le['log-type'] = 'security'
+                                            for hdlr in out_handlers:
+                                                hdlr.output_entries(
+                                                    log_entries, console)
+                                        elif topic_name == audit_topic_name:
+                                            log_entries = message['log-entries']
+                                            for le in log_entries:
+                                                le['log-type'] = 'audit'
+                                            for hdlr in out_handlers:
+                                                hdlr.output_entries(
+                                                    log_entries, console)
+                                        else:
+                                            SELF_LOGGER.warning(
+                                                "Ignoring invalid topic name: {}".
+                                                format(topic_name))
                                     else:
                                         SELF_LOGGER.warning(
-                                            "Ignoring invalid topic name: {}".
-                                            format(topic_name))
-                                else:
-                                    SELF_LOGGER.warning(
-                                        "Ignoring invalid notification type: "
-                                        "{}".
-                                        format(headers['notification-type']))
-                            SELF_LOGGER.warning(
-                                "Notification receiver has disconnected - "
-                                "reopening")
+                                            "Ignoring invalid notification type: "
+                                            "{}".
+                                            format(headers['notification-type']))
+                                SELF_LOGGER.warning(
+                                    "Unexpected end of receiver.notifications() "
+                                    "loop - starting loop again")
+                                time.sleep(5)
+                            except zhmcclient.NotificationError as exc:
+                                SELF_LOGGER.warning(
+                                    "Reconnecting after notification error: "
+                                    "{}: {}".
+                                    format(exc.__class__.__name__, exc))
+                            except StompException as exc:
+                                SELF_LOGGER.warning(
+                                    "Reconnecting after STOMP error: "
+                                    "{}: {}".
+                                    format(exc.__class__.__name__, exc))
                     except KeyboardInterrupt:
                         out_handler.output_end()
                         SELF_LOGGER.info(
@@ -1946,10 +2108,6 @@ def main():
                                 "receiver: {}".format(exc))
             else:
                 out_handler.output_end()
-        except StompException as exc:
-            raise ConnectionError(
-                "Error with STOMP notifications from HMC: {}: {}".
-                format(exc.__class__.__name__, exc))
         except KeyboardInterrupt:
             pass
         finally:
