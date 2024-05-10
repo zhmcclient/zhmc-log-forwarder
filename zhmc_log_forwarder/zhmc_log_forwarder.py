@@ -1832,6 +1832,10 @@ def main():
             "Collecting these logs altogether: {logs}".
             format(logs=', '.join(all_logs)))
 
+        if 'StompException' not in globals():
+            # pylint: disable=import-outside-toplevel
+            from stomp.exception import StompException
+
         try:  # make sure the session gets logged off
 
             session = zhmcclient.Session(hmc, userid, password)
@@ -1862,8 +1866,15 @@ def main():
                         audit_topic_name = topic_item['topic-name']
                         topic_names.append(audit_topic_name)
                 if topic_names:
-                    receiver = zhmcclient.NotificationReceiver(
-                        topic_names, hmc, userid, password)
+                    try:
+                        receiver = zhmcclient.NotificationReceiver(
+                            topic_names, hmc, userid, password)
+                    except StompException as exc:
+                        SELF_LOGGER.error(
+                            "Cannot create notification receiver: {}: {}".
+                            format(exc.__class__.__name__, exc))
+                        raise
+
                     try:  # make sure the receiver gets closed
                         SELF_LOGGER.info(
                             "Starting to wait for future log entries")
@@ -1914,6 +1925,10 @@ def main():
                                 "receiver: {}".format(exc))
             else:
                 out_handler.output_end()
+        except StompException as exc:
+            raise ConnectionError(
+                "Error with STOMP notifications from HMC: {}: {}".
+                format(exc.__class__.__name__, exc))
         except KeyboardInterrupt:
             pass
         finally:
