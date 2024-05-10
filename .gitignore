@@ -3,6 +3,7 @@
 /.settings/
 /.cache/
 /.tox/
+/myconfig/
 /htmlcov/
 /build/
 /build_doc/
