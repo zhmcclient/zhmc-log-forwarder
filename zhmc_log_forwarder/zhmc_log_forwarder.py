@@ -133,6 +133,19 @@ CONFIG_FILE_SCHEMA = {
                 "mypassword"
             ],
         },
+        "hmc_verify_cert": {
+            "$id": "#/properties/hmc_verify_cert",
+            "type": ["boolean", "string"],
+            "title": "Controls whether and how the HMC certificate is "
+            "verified.",
+            "default": True,
+            "examples": [
+                "true",
+                "false",
+                "mycerts/ca.pem"
+                "mycerts_dir"
+            ],
+        },
         "label": {
             "$id": "#/properties/label",
             "type": ["string", "null"],
@@ -808,6 +821,12 @@ hmc_user: myuser
 
 # HMC password.
 hmc_password: mypassword
+
+# HMC certificte validation:
+# - true (default): CA certificates in the Python 'certifi' package.
+# - false: Disable CA certificate validation.
+# - str: Path to CA PEM file or CA directory (with c_rehash links).
+hmc_verify_cert: mycerts/ca.pem
 
 # Label for the HMC to be used in the log message (as field 'label').
 label: myregion-myzone-myhmc
@@ -1740,6 +1759,7 @@ def main():
         hmc = config.parms['hmc_host']
         userid = config.parms['hmc_user']
         password = config.parms['hmc_password']
+        verify_cert = config.parms['hmc_verify_cert']
         label = config.parms['label']
         since = config.parms['since']
         future = config.parms['future']
@@ -1834,7 +1854,8 @@ def main():
 
         try:  # make sure the session gets logged off
 
-            session = zhmcclient.Session(hmc, userid, password)
+            session = zhmcclient.Session(
+                hmc, userid, password, verify_cert=verify_cert)
             client = zhmcclient.Client(session)
             console = client.consoles.console
 
