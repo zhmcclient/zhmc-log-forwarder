@@ -131,9 +131,9 @@ check_py_files := \
     $(test_py_files) \
 
 ifdef TESTCASES
-pytest_opts := -k $(TESTCASES)
+pytest_opts := $(TESTOPTS) -k $(TESTCASES)
 else
-pytest_opts :=
+pytest_opts := $(TESTOPTS)
 endif
 
 # Files to be built
@@ -176,6 +176,8 @@ help:
 	@echo '  PACKAGE_LEVEL="latest" - Default: Install latest version of dependent Python packages'
 	@echo '  PYTHON_CMD=... - Name of python command. Default: python'
 	@echo '  PIP_CMD=... - Name of pip command. Default: pip'
+	@echo '  TESTCASES=... - Testcase filter for pytest -k'
+	@echo '  TESTOPTS=... - Options for pytest'
 
 .PHONY: develop
 develop: develop_$(python_version_fn).done

@@ -135,7 +135,7 @@ CONFIG_FILE_SCHEMA = {
         },
         "label": {
             "$id": "#/properties/label",
-            "type": "string",
+            "type": ["string", "null"],
             "title": "Label for the HMC to be used in log message "
             "(as field 'label').",
             "default": None,
