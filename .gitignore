@@ -18,6 +18,7 @@
 .coverage
 .venv
 *.done
+/done/*.done
 *.log
 *.tmp
 tmp.*
