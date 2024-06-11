@@ -142,7 +142,7 @@ build_files := $(bdist_file) $(sdist_file)
 # Files the distribution archive depends upon.
 dist_dependent_files := \
     setup.py \
-    README.rst \
+    README.md \
     requirements.txt \
     $(package_py_files) \
 
