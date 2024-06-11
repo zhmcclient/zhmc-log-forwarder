@@ -67,11 +67,11 @@ module_name := zhmc_log_forwarder
 # Note: The package version is defined in zhmc_log_forwarder/version.py.
 package_version := $(shell $(PYTHON_CMD) setup.py --version)
 
-# Python major version
-python_major_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s'%sys.version_info[0])")
-
-# Python major+minor version for use in file names
-pymn := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s%s'%(sys.version_info[0],sys.version_info[1]))")
+# Python versions
+python_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}.{}.{}'.format(*sys.version_info[0:3]))")
+python_mn_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}.{}'.format(*sys.version_info[0:2]))")
+python_m_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}'.format(sys.version_info[0]))")
+pymn := py$(python_mn_version)
 
 # Directory for the generated distribution files
 dist_dir := dist
@@ -133,6 +133,20 @@ check_py_files := \
     $(package_py_files) \
     $(test_py_files) \
 
+# Packages whose dependencies are checked using pip-missing-reqs
+check_reqs_base_packages := pip_check_reqs pipdeptree pytest coverage coveralls flake8 pylint twine
+ifeq ($(python_m_version),2)
+  check_reqs_packages := $(check_reqs_base_packages)
+else ifeq ($(python_mn_version),3.5)
+  check_reqs_packages := $(check_reqs_base_packages)
+else ifeq ($(python_mn_version),3.6)
+  check_reqs_packages := $(check_reqs_base_packages)
+else ifeq ($(python_mn_version),3.7)
+  check_reqs_packages := $(check_reqs_base_packages)
+else
+  check_reqs_packages := $(check_reqs_base_packages)
+endif
+
 ifdef TESTCASES
 pytest_opts := $(TESTOPTS) -k $(TESTCASES)
 else
@@ -156,10 +170,11 @@ dist_dependent_files := \
 help:
 	@echo 'Makefile for $(package_name) project'
 	@echo 'Package version will be: $(package_version)'
-	@echo 'Uses the currently active Python environment: Python $(pymn)'
+	@echo 'Uses the currently active Python environment with Python $(python_version)'
 	@echo 'Valid targets are (they do just what is stated, i.e. no automatic prereq targets):'
-	@echo '  develop    - Prepare the development environment by installing prerequisites'
 	@echo '  install    - Install package in active Python environment'
+	@echo '  develop    - Prepare the development environment by installing prerequisites'
+	@echo "  check_reqs - Perform missing dependency checks"
 	@echo '  check      - Run Flake8 on sources and save results in: flake8.log'
 	@echo '  pylint     - Run PyLint on sources and save results in: pylint.log'
 	@echo '  test       - Run tests (and test coverage) and save results in: $(test_log_file)'
@@ -191,11 +206,11 @@ install: $(done_dir)/install_$(pymn).done
 	@echo '$@ done.'
 
 .PHONY: check
-check: flake8.log
+check: $(done_dir)/flake8_$(pymn).done
 	@echo '$@ done.'
 
 .PHONY: pylint
-pylint: pylint.log
+pylint: $(done_dir)/pylint_$(pymn).done
 	@echo '$@ done.'
 
 .PHONY: test
@@ -211,7 +226,7 @@ builddoc: $(doc_build_dir)/html/docs/index.html
 	@echo '$@ done.'
 
 .PHONY: all
-all: develop install check test build builddoc
+all: install develop check_reqs check test build builddoc
 	@echo '$@ done.'
 
 .PHONY: upload
@@ -311,21 +326,42 @@ else
 endif
 
 # TODO: Once PyLint has no more errors, remove the dash "-"
-pylint.log: Makefile $(pylint_rc_file) $(check_py_files)
-ifeq ($(python_major_version), 2)
-	rm -fv $@
-	-bash -c 'set -o pipefail; pylint --rcfile=$(pylint_rc_file) --output-format=text $(check_py_files) 2>&1 |tee $@.tmp'
-	mv -f $@.tmp $@
-	@echo 'Done: Created PyLint log file: $@'
+$(done_dir)/pylint_$(pymn).done: $(done_dir)/develop_$(pymn).done Makefile $(pylint_rc_file) $(check_py_files)
+ifeq ($(python_m_version),2)
+	@echo "Makefile: Warning: Skipping Pylint on Python $(python_version)" >&2
 else
-	@echo 'Info: PyLint requires Python 2; skipping this step on Python $(python_major_version)'
+	@echo "Makefile: Running Pylint"
+	-$(call RM_FUNC,$@)
+	-pylint --disable=fixme --rcfile=$(pylint_rc_file) --output-format=text $(check_py_files)
+	echo "done" >$@
+	@echo "Makefile: Done running Pylint"
 endif
 
-flake8.log: Makefile $(flake8_rc_file) $(check_py_files)
-	rm -fv $@
-	bash -c 'set -o pipefail; flake8 $(check_py_files) 2>&1 |tee $@.tmp'
-	mv -f $@.tmp $@
-	@echo 'Done: Created Flake8 log file: $@'
+# TODO: Once Flake8 has no more errors, remove the dash "-"
+$(done_dir)/flake8_$(pymn).done: $(done_dir)/develop_$(pymn).done Makefile $(flake8_rc_file) $(check_py_files)
+	-$(call RM_FUNC,$@)
+	-flake8 $(check_py_files)
+	echo "done" >$@
+
+.PHONY: check_reqs
+check_reqs: $(done_dir)/develop_$(pymn).done minimum-constraints.txt requirements.txt
+ifeq ($(python_m_version),2)
+	@echo "Makefile: Warning: Skipping the checking of missing dependencies on Python $(python_version)" >&2
+else
+	@echo "Makefile: Checking missing dependencies of this package"
+	pip-missing-reqs $(package_name) --requirements-file=requirements.txt
+	pip-missing-reqs $(package_name) --requirements-file=minimum-constraints.txt
+	@echo "Makefile: Done checking missing dependencies of this package"
+ifeq ($(PLATFORM),Windows_native)
+# Reason for skipping on Windows is https://github.com/r1chardj0n3s/pip-check-reqs/issues/67
+	@echo "Makefile: Warning: Skipping the checking of missing dependencies of site-packages directory on native Windows" >&2
+else
+	@echo "Makefile: Checking missing dependencies of some development packages in our minimum versions"
+	@rc=0; for pkg in $(check_reqs_packages); do dir=$$($(PYTHON_CMD) -c "import $${pkg} as m,os; dm=os.path.dirname(m.__file__); d=dm if not dm.endswith('site-packages') else m.__file__; print(d)"); cmd="pip-missing-reqs $${dir} --requirements-file=minimum-constraints.txt"; echo $${cmd}; $${cmd}; rc=$$(expr $${rc} + $${?}); done; exit $${rc}
+	@echo "Makefile: Done checking missing dependencies of some development packages in our minimum versions"
+endif
+endif
+	@echo "Makefile: $@ done."
 
 $(test_log_file): Makefile $(package_py_files) $(test_py_files) .coveragerc
 	rm -fv $@
