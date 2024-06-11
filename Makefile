@@ -71,7 +71,7 @@ package_version := $(shell $(PYTHON_CMD) setup.py --version)
 python_major_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s'%sys.version_info[0])")
 
 # Python major+minor version for use in file names
-python_version_fn := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s%s'%(sys.version_info[0],sys.version_info[1]))")
+pymn := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('%s%s'%(sys.version_info[0],sys.version_info[1]))")
 
 # Directory for the generated distribution files
 dist_dir := dist
@@ -107,13 +107,16 @@ doc_dependent_files := \
 test_dir := tests
 
 # Test log
-test_log_file := test_$(python_version_fn).log
+test_log_file := test_$(pymn).log
 
 # Source files with test code
 test_py_files := \
     $(wildcard $(test_dir)/*.py) \
     $(wildcard $(test_dir)/*/*.py) \
     $(wildcard $(test_dir)/*/*/*.py) \
+
+# Directory for .done files
+done_dir := done
 
 # Determine whether py.test has the --no-print-logs option.
 pytest_no_log_opt := $(shell py.test --help 2>/dev/null |grep '\--no-print-logs' >/dev/null; if [ $$? -eq 0 ]; then echo '--no-print-logs'; else echo ''; fi)
@@ -153,7 +156,7 @@ dist_dependent_files := \
 help:
 	@echo 'Makefile for $(package_name) project'
 	@echo 'Package version will be: $(package_version)'
-	@echo 'Uses the currently active Python environment: Python $(python_version_fn)'
+	@echo 'Uses the currently active Python environment: Python $(pymn)'
 	@echo 'Valid targets are (they do just what is stated, i.e. no automatic prereq targets):'
 	@echo '  develop    - Prepare the development environment by installing prerequisites'
 	@echo '  install    - Install package in active Python environment'
@@ -180,11 +183,11 @@ help:
 	@echo '  TESTOPTS=... - Options for pytest'
 
 .PHONY: develop
-develop: develop_$(python_version_fn).done
+develop: $(done_dir)/develop_$(pymn).done
 	@echo '$@ done.'
 
 .PHONY: install
-install: install_$(python_version_fn).done
+install: $(done_dir)/install_$(pymn).done
 	@echo '$@ done.'
 
 .PHONY: check
@@ -233,7 +236,7 @@ uninstall:
 .PHONY: clobber
 clobber: clean
 	rm -Rf $(doc_build_dir) htmlcov .tox
-	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file) *.done $(dist_dir)/$(package_name)-$(package_version)*.egg
+	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file) $(done_dir)/*.done $(dist_dir)/$(package_name)-$(package_version)*.egg
 	@echo 'Done: Removed all build products to get to a fresh state.'
 	@echo '$@ done.'
 
@@ -259,20 +262,20 @@ ifeq (,$(package_version))
 	$(error Package version could not be determined)
 endif
 
-pip_$(python_version_fn).done:
+$(done_dir)/pip_$(pymn).done:
 	rm -fv $@
 	@echo 'Installing/upgrading pip, setuptools and wheel with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel
 	touch $@
 
-develop_$(python_version_fn).done: pip_$(python_version_fn).done dev-requirements.txt requirements.txt
+$(done_dir)/develop_$(pymn).done: $(done_dir)/pip_$(pymn).done dev-requirements.txt requirements.txt
 	rm -fv $@
 	@echo 'Installing runtime and development requirements with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r dev-requirements.txt
 	touch $@
 	@echo 'Done: Installed runtime and development requirements'
 
-install_$(python_version_fn).done: pip_$(python_version_fn).done requirements.txt setup.py $(package_py_files)
+$(done_dir)/install_$(pymn).done: $(done_dir)/pip_$(pymn).done requirements.txt setup.py $(package_py_files)
 	rm -fv $@
 	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
