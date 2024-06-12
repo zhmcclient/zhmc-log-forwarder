@@ -29,19 +29,8 @@ A short overview presentation is here:
 
 # Installation
 
-Because the zhmc_log_forwarder package is not on Pypi yet, it needs to
-be installed directly from its Git repo:
-
 ``` text
-$ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@VERSION#egg=zhmc-log-forwarder
-```
-
-where `VERSION` needs to be replaced with the package version or branch
-name you want to install. For example, to install the version from the
-`master` branch, issue:
-
-``` text
-$ pip install git+https://github.ibm.com/zhmcclient/zhmc-log-forwarder.git@master#egg=zhmc-log-forwarder
+$ pip install zhmc-log-forwarder
 ```
 
 This will install the package and all of its prerequisite packages into
@@ -94,10 +83,6 @@ clutter up your system Python.
 
     The command will run forever (or until stopped with Ctrl-C) and will
     forward the log records as specified in the config file.
-
-Note that neither installation nor usage of the `zhmc_log_forwarder`
-command requires cloning this Github repo or being in a specific
-directory.
 
 # License
 
