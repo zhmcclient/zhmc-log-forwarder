@@ -20,4 +20,8 @@ zhmcclient>=1.16.0 # Apache-2.0
 jsonschema>=3.0.0 # MIT
 
 # Indirect dependencies that are needed to address issues:
-# None
+
+# six is used by python-dateutil, zhmcclient
+# six 1.16.0 removes the ImportWarning raised by Python 3.10
+six>=1.14.0; python_version <= '3.9'
+six>=1.16.0; python_version >= '3.10'
