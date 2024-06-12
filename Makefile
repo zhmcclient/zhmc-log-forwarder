@@ -78,7 +78,7 @@ dist_dir := dist
 
 # Distribution archives (as built by setup.py)
 bdist_file := $(dist_dir)/$(package_name_under)-$(package_version)-py2.py3-none-any.whl
-sdist_file := $(dist_dir)/$(package_name)-$(package_version).tar.gz
+sdist_file := $(dist_dir)/$(package_name_under)-$(package_version).tar.gz
 
 dist_files := $(bdist_file) $(sdist_file)
 
