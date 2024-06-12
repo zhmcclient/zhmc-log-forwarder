@@ -23,4 +23,4 @@ Version of the zhmc-log-forwarder project.
 #:
 #: * "M.N.P.devD": Development level D of a not yet released version M.N.P
 #: * "M.N.P": A released version M.N.P
-__version__ = '0.10.0'
+__version__ = '0.11.0'
