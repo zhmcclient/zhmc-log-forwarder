@@ -198,19 +198,19 @@ help:
 	@echo '  TESTOPTS=... - Options for pytest'
 
 .PHONY: develop
-develop: $(done_dir)/develop_$(pymn).done
+develop: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
 
 .PHONY: install
-install: $(done_dir)/install_$(pymn).done
+install: $(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
 
 .PHONY: check
-check: $(done_dir)/flake8_$(pymn).done
+check: $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
 
 .PHONY: pylint
-pylint: $(done_dir)/pylint_$(pymn).done
+pylint: $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
 
 .PHONY: test
@@ -277,20 +277,20 @@ ifeq (,$(package_version))
 	$(error Package version could not be determined)
 endif
 
-$(done_dir)/pip_$(pymn).done:
+$(done_dir)/pip_$(pymn)_$(PACKAGE_LEVEL).done:
 	rm -fv $@
 	@echo 'Installing/upgrading pip, setuptools and wheel with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel
 	touch $@
 
-$(done_dir)/develop_$(pymn).done: $(done_dir)/pip_$(pymn).done dev-requirements.txt requirements.txt
+$(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/pip_$(pymn)_$(PACKAGE_LEVEL).done dev-requirements.txt requirements.txt
 	rm -fv $@
 	@echo 'Installing runtime and development requirements with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r dev-requirements.txt
 	touch $@
 	@echo 'Done: Installed runtime and development requirements'
 
-$(done_dir)/install_$(pymn).done: $(done_dir)/pip_$(pymn).done requirements.txt setup.py $(package_py_files)
+$(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/pip_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt setup.py $(package_py_files)
 	rm -fv $@
 	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
@@ -326,7 +326,7 @@ else
 endif
 
 # TODO: Once PyLint has no more errors, remove the dash "-"
-$(done_dir)/pylint_$(pymn).done: $(done_dir)/develop_$(pymn).done Makefile $(pylint_rc_file) $(check_py_files)
+$(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(pylint_rc_file) $(check_py_files)
 ifeq ($(python_m_version),2)
 	@echo "Makefile: Warning: Skipping Pylint on Python $(python_version)" >&2
 else
@@ -338,13 +338,13 @@ else
 endif
 
 # TODO: Once Flake8 has no more errors, remove the dash "-"
-$(done_dir)/flake8_$(pymn).done: $(done_dir)/develop_$(pymn).done Makefile $(flake8_rc_file) $(check_py_files)
+$(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(flake8_rc_file) $(check_py_files)
 	-$(call RM_FUNC,$@)
 	-flake8 $(check_py_files)
 	echo "done" >$@
 
 .PHONY: check_reqs
-check_reqs: $(done_dir)/develop_$(pymn).done minimum-constraints.txt requirements.txt
+check_reqs: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done minimum-constraints.txt requirements.txt
 ifeq ($(python_m_version),2)
 	@echo "Makefile: Warning: Skipping the checking of missing dependencies on Python $(python_version)" >&2
 else
