@@ -175,8 +175,8 @@ help:
 	@echo '  install    - Install package in active Python environment'
 	@echo '  develop    - Prepare the development environment by installing prerequisites'
 	@echo "  check_reqs - Perform missing dependency checks"
-	@echo '  check      - Run Flake8 on sources and save results in: flake8.log'
-	@echo '  pylint     - Run PyLint on sources and save results in: pylint.log'
+	@echo '  check      - Run Flake8 on sources'
+	@echo '  pylint     - Run PyLint on sources'
 	@echo '  test       - Run tests (and test coverage) and save results in: $(test_log_file)'
 	@echo '               Does not include install but depends on it, so make sure install is current.'
 	@echo '               Env.var TESTCASES can be used to specify a py.test expression for its -k option'
@@ -251,7 +251,7 @@ uninstall:
 .PHONY: clobber
 clobber: clean
 	rm -Rf $(doc_build_dir) htmlcov .tox
-	rm -f pylint.log flake8.log test_*.log $(bdist_file) $(sdist_file) $(done_dir)/*.done $(dist_dir)/$(package_name)-$(package_version)*.egg
+	rm -f test_*.log $(bdist_file) $(sdist_file) $(done_dir)/*.done $(dist_dir)/$(package_name)-$(package_version)*.egg
 	@echo 'Done: Removed all build products to get to a fresh state.'
 	@echo '$@ done.'
 
@@ -325,22 +325,20 @@ else
 	@false
 endif
 
-# TODO: Once PyLint has no more errors, remove the dash "-"
 $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(pylint_rc_file) $(check_py_files)
 ifeq ($(python_m_version),2)
 	@echo "Makefile: Warning: Skipping Pylint on Python $(python_version)" >&2
 else
 	@echo "Makefile: Running Pylint"
 	-$(call RM_FUNC,$@)
-	-pylint --disable=fixme --rcfile=$(pylint_rc_file) --output-format=text $(check_py_files)
+	pylint --disable=fixme --rcfile=$(pylint_rc_file) --output-format=text $(check_py_files)
 	echo "done" >$@
 	@echo "Makefile: Done running Pylint"
 endif
 
-# TODO: Once Flake8 has no more errors, remove the dash "-"
 $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(flake8_rc_file) $(check_py_files)
 	-$(call RM_FUNC,$@)
-	-flake8 $(check_py_files)
+	flake8 $(check_py_files)
 	echo "done" >$@
 
 .PHONY: check_reqs

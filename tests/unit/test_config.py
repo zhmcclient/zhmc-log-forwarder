@@ -2,11 +2,8 @@
 """Unit tests for zhmc_log_forwarder.Config class"""
 
 import os
-import sys
 import uuid
-
 import pytest
-import zhmcclient
 
 from zhmc_log_forwarder import zhmc_log_forwarder
 
@@ -51,10 +48,12 @@ hmc_password: pw1
     ),
 ]
 
+
 @pytest.mark.parametrize(
     "desc, config_file, exp_parms, exp_exc", TESTCASES_CONFIG_LOAD
 )
 def test_config_load(desc, config_file, exp_parms, exp_exc):
+    # pylint: disable=unused-argument
     """Tests if some generic file is correctly parsed."""
 
     config_filename = "{}_{}.yaml".format(TEST_PREFIX, uuid.uuid4().hex)
