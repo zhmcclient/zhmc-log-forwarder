@@ -15,9 +15,8 @@ attrs>=17.4.0 # MIT
 PyYAML>=3.13 # MIT
 python-dateutil>=2.7.5 # Apache
 requests>=2.20.0 # Apache-2.0
-# TODO-ZHMC: Enable zhmcclient 1.16.0 again once released.
-zhmcclient @ git+https://github.com/zhmcclient/python-zhmcclient.git@andy/improve-stomp-exceptions
-# zhmcclient>=1.16.0 # Apache-2.0
+# zhmcclient @ git+https://github.com/zhmcclient/python-zhmcclient.git@master
+zhmcclient>=1.16.0 # Apache-2.0
 jsonschema>=3.0.0 # MIT
 
 # Indirect dependencies that are needed to address issues:
