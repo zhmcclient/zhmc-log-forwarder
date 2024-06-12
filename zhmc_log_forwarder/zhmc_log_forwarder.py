@@ -49,7 +49,6 @@ BLANKED_SECRET = '********'
 
 DEST_LOGGER_NAME = CMD_NAME + '_dest'
 SELF_LOGGER_NAME = CMD_NAME
-SELF_LOGGER = None  # Will be initialized in main()
 
 # Indent for JSON output to CADF (None=oneline)
 CADF_JSON_INDENT = None
@@ -1893,7 +1892,7 @@ def get_log_entries(logs, console, begin_time, end_time):
 
 
 def process_future(
-        session, console, out_handlers, all_logs,
+        self_logger, session, console, out_handlers, all_logs,
         hmc, userid, password, stomp_rt_config):
     """
     Process future items
@@ -1918,13 +1917,13 @@ def process_future(
                 topic_names, hmc, userid, password,
                 stomp_rt_config=stomp_rt_config)
         except stomp.exception.StompException as exc:
-            SELF_LOGGER.error(
+            self_logger.error(
                 "Cannot create notification receiver: {}: {}".
                 format(exc.__class__.__name__, exc))
             raise
 
         try:  # make sure the receiver gets closed
-            SELF_LOGGER.info(
+            self_logger.info(
                 "Starting to wait for future log entries")
             while True:
                 try:
@@ -1944,38 +1943,38 @@ def process_future(
                                 for hdlr in out_handlers:
                                     hdlr.output_entries(log_entries, console)
                             else:
-                                SELF_LOGGER.warning(
+                                self_logger.warning(
                                     "Ignoring invalid topic name: {}".
                                     format(topic_name))
                         else:
-                            SELF_LOGGER.warning(
+                            self_logger.warning(
                                 "Ignoring invalid notification type: {}".
                                 format(headers['notification-type']))
-                    SELF_LOGGER.warning(
+                    self_logger.warning(
                         "Unexpected end of receiver.notifications() "
                         "loop - starting loop again")
                     time.sleep(5)
                 except zhmcclient.NotificationError as exc:
-                    SELF_LOGGER.warning(
+                    self_logger.warning(
                         "Reconnecting after notification error: {}: {}".
                         format(exc.__class__.__name__, exc))
                 except stomp.exception.StompException as exc:
-                    SELF_LOGGER.warning(
+                    self_logger.warning(
                         "Reconnecting after STOMP error: {}: {}".
                         format(exc.__class__.__name__, exc))
         except KeyboardInterrupt:
             for hdlr in out_handlers:
                 hdlr.output_end()
-            SELF_LOGGER.info(
+            self_logger.info(
                 "Received keyboard interrupt - stopping to wait "
                 "for future log entries")
         finally:
-            SELF_LOGGER.info(
+            self_logger.info(
                 "Closing notification receiver")
             try:
                 receiver.close()
             except zhmcclient.Error as exc:
-                SELF_LOGGER.warning(
+                self_logger.warning(
                     "Ignoring error when closing notification receiver: {}".
                     format(exc))
 
@@ -1990,8 +1989,7 @@ def main():
     # Initial self-logger, using defaults.
     # This is needed for errors during config processing.
     top_schema_props = CONFIG_FILE_SCHEMA['properties']
-    # pylint: disable=redefined-outer-name
-    SELF_LOGGER = SelfLogger(
+    self_logger = SelfLogger(
         dest=top_schema_props['selflog_dest']['default'],
         format_str=top_schema_props['selflog_format']['default'],
         time_format=top_schema_props['selflog_time_format']['default'],
@@ -2005,7 +2003,7 @@ def main():
         config.load_config_file(args.config_file)
 
         # Final self-logger, using configuration parameters.
-        SELF_LOGGER = SelfLogger(
+        self_logger = SelfLogger(
             dest=config.parms['selflog_dest'],
             format_str=config.parms['selflog_format'],
             time_format=config.parms['selflog_time_format'],
@@ -2018,7 +2016,7 @@ def main():
             time_format=config.parms['selflog_time_format'],
             debug=args.debug)
 
-        # SELF_LOGGER.debug("Effective config with defaults: {!r}".
+        # self_logger.debug("Effective config with defaults: {!r}".
         #                   format(config))
 
         stomp_rt_config = zhmcclient.StompRetryTimeoutConfig(
@@ -2065,20 +2063,20 @@ def main():
                     "value: {}".
                     format(args.since))
 
-        SELF_LOGGER.info(
+        self_logger.info(
             "{} starting".format(CMD_NAME))
-        SELF_LOGGER.info(
+        self_logger.info(
             "{} version: {}".format(CMD_NAME, __version__))
-        SELF_LOGGER.info(
+        self_logger.info(
             "Config file: {file}".
             format(file=args.config_file))
-        SELF_LOGGER.info(
+        self_logger.info(
             "HMC log message file for CADF: {file}".
             format(file=log_message_file))
-        SELF_LOGGER.info(
+        self_logger.info(
             "HMC: {host}, Userid: {user}, Label: {label}".
             format(host=hmc, user=userid, label=label))
-        SELF_LOGGER.info(
+        self_logger.info(
             "Since: {since}, Future: {future}".
             format(since=since_str, future=future))
 
@@ -2103,7 +2101,7 @@ def main():
                     format(dest, syslog_host, syslog_port, syslog_porttype,
                            syslog_facility)
 
-            SELF_LOGGER.info(
+            self_logger.info(
                 "Forwarding: '{name}'; Logs: {logs}; Destination: {dest}; "
                 "Format: {fmt}".
                 format(name=name, logs=', '.join(logs), dest=dest_str,
@@ -2115,7 +2113,7 @@ def main():
             for log in logs:
                 all_logs.add(log)
 
-        SELF_LOGGER.info(
+        self_logger.info(
             "Collecting these logs altogether: {logs}".
             format(logs=', '.join(all_logs)))
 
@@ -2136,7 +2134,7 @@ def main():
 
             if future:
                 process_future(
-                    session, console, out_handlers, all_logs,
+                    self_logger, session, console, out_handlers, all_logs,
                     hmc, userid, password, stomp_rt_config)
             else:
                 for hdlr in out_handlers:
@@ -2144,19 +2142,19 @@ def main():
         except KeyboardInterrupt:
             pass
         finally:
-            SELF_LOGGER.info(
+            self_logger.info(
                 "Logging off from HMC")
             try:
                 session.logoff()
             except zhmcclient.Error as exc:
-                SELF_LOGGER.warning(
+                self_logger.warning(
                     "Ignoring error when logging off from HMC: {}".
                     format(exc))
     except (Error, zhmcclient.Error) as exc:
-        SELF_LOGGER.error(str(exc))
+        self_logger.error(str(exc))
         sys.exit(1)
 
-    SELF_LOGGER.info(
+    self_logger.info(
         "{} stopped".format(CMD_NAME))
 
 
