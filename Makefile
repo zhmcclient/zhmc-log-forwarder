@@ -166,18 +166,7 @@ check_py_files := \
     $(test_py_files) \
 
 # Packages whose dependencies are checked using pip-missing-reqs
-check_reqs_base_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 pylint safety twine
-ifeq ($(python_m_version),2)
-  check_reqs_packages := $(check_reqs_base_packages)
-else ifeq ($(python_mn_version),3.5)
-  check_reqs_packages := $(check_reqs_base_packages)
-else ifeq ($(python_mn_version),3.6)
-  check_reqs_packages := $(check_reqs_base_packages)
-else ifeq ($(python_mn_version),3.7)
-  check_reqs_packages := $(check_reqs_base_packages)
-else
-  check_reqs_packages := $(check_reqs_base_packages)
-endif
+check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 pylint safety twine
 
 ifdef TESTCASES
 pytest_opts := $(TESTOPTS) -k $(TESTCASES)
@@ -356,20 +345,10 @@ $(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PA
 	@echo 'Done: Installed $(package_name) in edit mode'
 
 $(doc_build_dir)/html/docs/index.html: Makefile $(doc_dependent_files)
-ifeq ($(python_m_version),2)
-	@echo "Makefile: Warning: Skipping creation of the HTML pages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.5)
-	@echo "Makefile: Warning: Skipping creation of the HTML pages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.6)
-	@echo "Makefile: Warning: Skipping creation of the HTML pages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.7)
-	@echo "Makefile: Warning: Skipping creation of the HTML pages on Python $(python_version)" >&2
-else
 	@echo "Makefile: Creating the HTML pages with top level file: $@"
 	-$(call RM_FUNC,$@)
 	$(doc_cmd) -b html $(doc_opts) $(doc_build_dir)/html
 	@echo "Done: Created the HTML pages with top level file: $@"
-endif
 
 # Note: distutils depends on the right files specified in MANIFEST.in, even when
 # they are already specified e.g. in 'package_data' in setup.py.
@@ -398,15 +377,11 @@ $(bdist_file) $(sdist_file): Makefile MANIFEST.in $(dist_included_files)
 	@echo 'Makefile: Done creating distribution archives: $@'
 
 $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(pylint_rc_file) $(check_py_files)
-ifeq ($(python_m_version),2)
-	@echo "Makefile: Warning: Skipping Pylint on Python $(python_version)" >&2
-else
 	@echo "Makefile: Running Pylint"
 	-$(call RM_FUNC,$@)
 	pylint --disable=fixme --rcfile=$(pylint_rc_file) --output-format=text $(check_py_files)
 	echo "done" >$@
 	@echo "Makefile: Done running Pylint"
-endif
 
 $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(flake8_rc_file) $(check_py_files)
 	-$(call RM_FUNC,$@)
@@ -414,44 +389,21 @@ $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(
 	echo "done" >$@
 
 $(done_dir)/safety_develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(safety_develop_policy_file) minimum-constraints-develop.txt
-ifeq ($(python_m_version),2)
-	@echo "Makefile: Warning: Skipping Safety tool for development packages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.5)
-	@echo "Makefile: Warning: Skipping Safety tool for development packages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.6)
-	@echo "Makefile: Warning: Skipping Safety tool for development packages on Python $(python_version)" >&2
-else
 	@echo "Makefile: Running Safety tool for development packages"
 	-$(call RM_FUNC,$@)
 	bash -c "safety check --policy-file $(safety_develop_policy_file) -r minimum-constraints-develop.txt --full-report || test '$(RUN_TYPE)' != 'release' || exit 1"
 	echo "done" >$@
 	@echo "Makefile: Done running Safety tool for development packages"
-endif
 
 $(done_dir)/safety_install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(safety_install_policy_file) minimum-constraints.txt
-ifeq ($(python_m_version),2)
-	@echo "Makefile: Warning: Skipping Safety tool for installation packages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.5)
-	@echo "Makefile: Warning: Skipping Safety tool for installation packages on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.6)
-	@echo "Makefile: Warning: Skipping Safety tool for installation packages on Python $(python_version)" >&2
-else
 	@echo "Makefile: Running Safety tool for installation packages"
 	-$(call RM_FUNC,$@)
 	safety check --policy-file $(safety_install_policy_file) -r minimum-constraints.txt --full-report
 	echo "done" >$@
 	@echo "Makefile: Done running Safety tool for installation packages"
-endif
 
 .PHONY: check_reqs
 check_reqs: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints.txt minimum-constraints-develop.txt
-ifeq ($(python_m_version),2)
-	@echo "Makefile: Warning: Skipping the checking of missing dependencies on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.5)
-	@echo "Makefile: Warning: Skipping the checking of missing dependencies on Python $(python_version)" >&2
-else ifeq ($(python_mn_version),3.6)
-	@echo "Makefile: Warning: Skipping the checking of missing dependencies on Python $(python_version)" >&2
-else
 	@echo "Makefile: Checking missing dependencies of this package"
 	pip-missing-reqs $(package_name) --requirements-file=requirements.txt
 	pip-missing-reqs $(package_name) --requirements-file=minimum-constraints.txt
@@ -465,7 +417,6 @@ else
 	@rc=0; for pkg in $(check_reqs_packages); do dir=$$($(PYTHON_CMD) -c "import $${pkg} as m,os; dm=os.path.dirname(m.__file__); d=dm if not dm.endswith('site-packages') else m.__file__; print(d)"); cmd="pip-missing-reqs $${dir} --requirements-file=tmp_minimum-constraints-all.txt"; echo $${cmd}; $${cmd}; rc=$$(expr $${rc} + $${?}); done; exit $${rc}
 	-$(call RM_FUNC,tmp_minimum-constraints-all.txt)
 	@echo "Makefile: Done checking missing dependencies of some development packages in our minimum versions"
-endif
 endif
 	@echo "Makefile: $@ done."
 
