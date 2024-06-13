@@ -185,7 +185,7 @@ help:
 	@echo '  check      - Run Flake8 on sources'
 	@echo '  pylint     - Run PyLint on sources'
 	@echo "  safety     - Run Safety tool"
-	@echo '  test       - Run tests (and test coverage) and save results in: $(test_log_file)'
+	@echo '  test       - Run tests (and test coverage)'
 	@echo '               Does not include install but depends on it, so make sure install is current.'
 	@echo '               Env.var TESTCASES can be used to specify a py.test expression for its -k option'
 	@echo '  build      - Build the distribution files in: $(dist_dir)'
@@ -224,10 +224,6 @@ pylint: $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done
 
 .PHONY: safety
 safety: $(done_dir)/safety_develop_$(pymn)_$(PACKAGE_LEVEL).done $(done_dir)/safety_install_$(pymn)_$(PACKAGE_LEVEL).done
-	@echo '$@ done.'
-
-.PHONY: test
-test: $(test_log_file)
 	@echo '$@ done.'
 
 .PHONY: build
@@ -438,8 +434,8 @@ endif
 endif
 	@echo "Makefile: $@ done."
 
-$(test_log_file): Makefile $(package_py_files) $(test_py_files) .coveragerc
-	rm -fv $@
-	bash -c 'set -o pipefail; PYTHONWARNINGS=ignore py.test $(pytest_no_log_opt) -s $(test_dir) --cov $(module_name) --cov-config .coveragerc --cov-report=html $(pytest_opts) 2>&1 |tee $@.tmp'
-	mv -f $@.tmp $@
-	@echo 'Done: Created test log file: $@'
+.PHONY: test
+test: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(package_py_files) $(test_py_files) .coveragerc
+	rm -Rf htmlcov
+	pytest $(pytest_no_log_opt) -s $(test_dir) --cov $(module_name) --cov-config .coveragerc --cov-report=html $(pytest_opts)
+	@echo '$@ done.'
