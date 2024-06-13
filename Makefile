@@ -1,28 +1,12 @@
 # ------------------------------------------------------------------------------
 # Makefile for zhmc-log-forwarder project
 #
-# Basic prerequisites for running this Makefile, to be provided manually:
-#   One of these OS platforms:
-#     Windows with CygWin
-#     Linux (any)
-#     OS-X
-#   These commands on all OS platforms:
-#     make (GNU make)
-#     bash
-#     rm, mv, find, tee, which
-#   These commands on all OS platforms in the active Python environment:
-#     python (or python3 on OS-X)
-#     pip (or pip3 on OS-X)
-#     twine
-#   These commands on Linux and OS-X:
-#     uname
-# Environment variables:
-#   PYTHON_CMD: Python command to use (OS-X needs to distinguish Python 2/3)
-#   PIP_CMD: Pip command to use (OS-X needs to distinguish Python 2/3)
-#   PACKAGE_LEVEL: minimum/latest - Level of Python dependent packages to use
-# Additional prerequisites for running this Makefile are installed by running:
-#   make develop
-# ------------------------------------------------------------------------------
+# make: GNU make
+#
+# Supported OS platforms:
+#   Windows
+#   Linux
+#   MacOS
 
 # Python / Pip commands
 ifndef PYTHON_CMD
@@ -46,12 +30,59 @@ else
   endif
 endif
 
-# Determine OS platform make runs on
+# Run type (normal, scheduled, release)
+ifndef RUN_TYPE
+  RUN_TYPE := normal
+endif
+
+# Make variables are case sensitive and some native Windows environments have
+# ComSpec set instead of COMSPEC.
+ifndef COMSPEC
+  ifdef ComSpec
+    COMSPEC = $(ComSpec)
+  endif
+endif
+
+# Determine OS platform make runs on.
 ifeq ($(OS),Windows_NT)
-  PLATFORM := Windows
+  ifdef PWD
+    PLATFORM := Windows_UNIX
+  else
+    PLATFORM := Windows_native
+    ifdef COMSPEC
+      SHELL := $(subst \,/,$(COMSPEC))
+    else
+      SHELL := cmd.exe
+    endif
+    .SHELLFLAGS := /c
+  endif
 else
   # Values: Linux, Darwin
   PLATFORM := $(shell uname -s)
+endif
+
+ifeq ($(PLATFORM),Windows_native)
+  # Note: The substituted backslashes must be doubled.
+  # Remove files (blank-separated list of wildcard path specs)
+  RM_FUNC = del /f /q $(subst /,\\,$(1))
+  # Remove files recursively (single wildcard path spec)
+  RM_R_FUNC = del /f /q /s $(subst /,\\,$(1))
+  # Remove directories (blank-separated list of wildcard path specs)
+  RMDIR_FUNC = rmdir /q /s $(subst /,\\,$(1))
+  # Remove directories recursively (single wildcard path spec)
+  RMDIR_R_FUNC = rmdir /q /s $(subst /,\\,$(1))
+  # Copy a file, preserving the modified date
+  CP_FUNC = copy /y $(subst /,\\,$(1)) $(subst /,\\,$(2))
+  ENV = set
+  WHICH = where
+else
+  RM_FUNC = rm -f $(1)
+  RM_R_FUNC = find . -type f -name '$(1)' -delete
+  RMDIR_FUNC = rm -rf $(1)
+  RMDIR_R_FUNC = find . -type d -name '$(1)' | xargs -n 1 rm -rf
+  CP_FUNC = cp -r $(1) $(2)
+  ENV = env | sort
+  WHICH = which
 endif
 
 # Name of this package on Pypi
@@ -105,9 +136,6 @@ doc_dependent_files := \
 
 # Directory with test source files
 test_dir := tests
-
-# Test log
-test_log_file := test_$(pymn).log
 
 # Source files with test code
 test_py_files := \
@@ -259,16 +287,23 @@ uninstall:
 
 .PHONY: clobber
 clobber: clean
-	rm -Rf $(doc_build_dir) htmlcov .tox .pytest_cache
-	rm -f test_*.log $(bdist_file) $(sdist_file) $(done_dir)/*.done $(dist_dir)/$(package_name)-$(package_version)*.egg
+	-$(call RMDIR_R_FUNC,$(doc_build_dir))
+	-$(call RMDIR_R_FUNC,htmlcov)
+	-$(call RMDIR_R_FUNC,.pytest_cache)
+	-$(call RMDIR_R_FUNC,.tox)
+	-$(call RM_FUNC,test_*.log $(bdist_file) $(sdist_file) $(done_dir)/*.done $(dist_dir)/$(package_name)-$(package_version)*.egg)
 	@echo 'Done: Removed all build products to get to a fresh state.'
 	@echo '$@ done.'
 
 .PHONY: clean
 clean:
-	rm -Rf build .cache $(package_name_under).egg-info .eggs
-	rm -f MANIFEST MANIFEST.in AUTHORS ChangeLog .coverage
-	find . -name "*.pyc" -delete -o -name "__pycache__" -delete -o -name "*.tmp" -delete -o -name "tmp_*" -delete
+	-$(call RMDIR_R_FUNC,build)
+	-$(call RMDIR_R_FUNC,__pycache__)
+	-$(call RMDIR_R_FUNC,.cache)
+	-$(call RMDIR_R_FUNC,$(package_name_under).egg-info)
+	-$(call RMDIR_R_FUNC,.eggs)
+	-$(call RM_FUNC,MANIFEST MANIFEST.in AUTHORS ChangeLog .coverage)
+	-$(call RM_R_FUNC,*.pyc *.tmp tmp_*)
 	@echo 'Done: Cleaned out all temporary files.'
 	@echo '$@ done.'
 
@@ -276,7 +311,7 @@ clean:
 pyshow:
 	which $(PYTHON_CMD)
 	$(PYTHON_CMD) --version
-	which $(PIP_CMD)
+	$(WHICH) $(PIP_CMD)
 	$(PIP_CMD) --version
 	@echo '$@ done.'
 
@@ -297,21 +332,21 @@ ifeq (,$(package_version))
 endif
 
 $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done: requirements-base.txt minimum-constraints.txt minimum-constraints-develop.txt
-	rm -fv $@
+	-$(call RM_FUNC,$@)
 	@echo 'Installing/upgrading base packages with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PYTHON_CMD) -m pip install $(pip_level_opts) -r requirements-base.txt
 	touch $@
 	@echo 'Done: Installed/upgraded base packages'
 
 $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements-develop.txt minimum-constraints.txt minimum-constraints-develop.txt
-	rm -fv $@
+	-$(call RM_FUNC,$@)
 	@echo 'Installing/upgrading development packages with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements-develop.txt
 	touch $@
 	@echo 'Done: Installed/upgraded development packages'
 
 $(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints.txt minimum-constraints-develop.txt setup.py $(package_py_files)
-	rm -fv $@
+	-$(call RM_FUNC,$@)
 	@echo 'Installing $(package_name) in edit mode with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
 	$(PIP_CMD) install -e .
@@ -331,7 +366,7 @@ else ifeq ($(python_mn_version),3.7)
 	@echo "Makefile: Warning: Skipping creation of the HTML pages on Python $(python_version)" >&2
 else
 	@echo "Makefile: Creating the HTML pages with top level file: $@"
-	rm -fv $@
+	-$(call RM_FUNC,$@)
 	$(doc_cmd) -b html $(doc_opts) $(doc_build_dir)/html
 	@echo "Done: Created the HTML pages with top level file: $@"
 endif
@@ -357,8 +392,8 @@ endif
 # which can lead to incorrect hashbangs in scripts in wheel archives.
 $(bdist_file) $(sdist_file): Makefile MANIFEST.in $(dist_included_files)
 	@echo 'Makefile: Creating distribution archives: $@'
-	rm -fv MANIFEST
-	rm -Rfv $(package_name).egg-info .eggs build
+	-$(call RM_FUNC,MANIFEST)
+	-$(call RMDIR_FUNC,$(package_name).egg-info .eggs build)
 	$(PYTHON_CMD) -m build --outdir $(dist_dir)
 	@echo 'Makefile: Done creating distribution archives: $@'
 
@@ -428,7 +463,7 @@ else
 	@echo "Makefile: Checking missing dependencies of some development packages in our minimum versions"
 	bash -c "cat minimum-constraints-develop.txt minimum-constraints.txt >tmp_minimum-constraints-all.txt"
 	@rc=0; for pkg in $(check_reqs_packages); do dir=$$($(PYTHON_CMD) -c "import $${pkg} as m,os; dm=os.path.dirname(m.__file__); d=dm if not dm.endswith('site-packages') else m.__file__; print(d)"); cmd="pip-missing-reqs $${dir} --requirements-file=tmp_minimum-constraints-all.txt"; echo $${cmd}; $${cmd}; rc=$$(expr $${rc} + $${?}); done; exit $${rc}
-	rm -fv tmp_minimum-constraints-all.txt
+	-$(call RM_FUNC,tmp_minimum-constraints-all.txt)
 	@echo "Makefile: Done checking missing dependencies of some development packages in our minimum versions"
 endif
 endif
@@ -436,6 +471,6 @@ endif
 
 .PHONY: test
 test: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(package_py_files) $(test_py_files) .coveragerc
-	rm -Rf htmlcov
+	-$(call RM_FUNC,htmlcov)
 	pytest $(pytest_no_log_opt) -s $(test_dir) --cov $(module_name) --cov-config .coveragerc --cov-report=html $(pytest_opts)
 	@echo '$@ done.'
