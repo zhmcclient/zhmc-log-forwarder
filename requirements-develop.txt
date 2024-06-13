@@ -1,19 +1,10 @@
 # ------------------------------------------------------------------------------
-# Pip requirements file for development dependencies.
-#
-# The order of packages is significant, because pip processes them in the order
-# of appearance. Changing the order has an impact on the overall integration
-# process, which may cause wedges in the gate later.
-
-# Make sure that the package versions in minimum-constraints.txt are also
-# the minimum versions required in requirements.txt and dev-requirements.txt.
+# Pip requirements file for packages needed for development.
 
 
-# Runtime dependencies:
--r requirements.txt
-
-
-# Direct dependencies:
+# ------------------------------------------------------------------------------
+# Direct dependencies for development.
+# Must be consistent with minimum-constraints-develop.txt.
 
 # Tests (imports into testcases):
 pytest>=3.0.5 # MIT
@@ -117,7 +108,10 @@ pip-check-reqs>=2.3.2; python_version >= '3.5' and python_version <= '3.7'
 pip-check-reqs>=2.4.3,!=2.5.0; python_version >= '3.8' and python_version <= '3.11'
 pip-check-reqs>=2.5.1; python_version >= '3.12'
 
-# Indirect dependencies that are needed to address issues:
+
+# ------------------------------------------------------------------------------
+# Indirect dependencies for development that are needed for some reason.
+# Must be consistent with minimum-constraints-develop.txt.
 
 # packaging is used by pytest, pip-check-reqs, sphinx
 # packaging>=20.5 is needed by pip-check-reqs 2.4.3 but it requires only packaging>=16.0

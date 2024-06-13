@@ -37,7 +37,7 @@ ifndef PACKAGE_LEVEL
   PACKAGE_LEVEL := latest
 endif
 ifeq ($(PACKAGE_LEVEL),minimum)
-  pip_level_opts := -c minimum-constraints.txt
+  pip_level_opts := -c minimum-constraints.txt -c minimum-constraints-develop.txt
 else
   ifeq ($(PACKAGE_LEVEL),latest)
     pip_level_opts := --upgrade
@@ -288,28 +288,29 @@ ifeq (,$(package_version))
 	$(error Package version could not be determined)
 endif
 
-$(done_dir)/pip_$(pymn)_$(PACKAGE_LEVEL).done:
+$(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done: requirements-base.txt minimum-constraints.txt minimum-constraints-develop.txt
 	rm -fv $@
-	@echo 'Installing/upgrading pip, setuptools and wheel with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PYTHON_CMD) -m pip install $(pip_level_opts) pip setuptools wheel
+	@echo 'Installing/upgrading base packages with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	$(PYTHON_CMD) -m pip install $(pip_level_opts) -r requirements-base.txt
 	touch $@
+	@echo 'Done: Installed/upgraded base packages'
 
-$(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/pip_$(pymn)_$(PACKAGE_LEVEL).done dev-requirements.txt requirements.txt
+$(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements-develop.txt minimum-constraints.txt minimum-constraints-develop.txt
 	rm -fv $@
-	@echo 'Installing runtime and development requirements with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PIP_CMD) install $(pip_level_opts) -r dev-requirements.txt
+	@echo 'Installing/upgrading development packages with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	$(PIP_CMD) install $(pip_level_opts) -r requirements-develop.txt
 	touch $@
-	@echo 'Done: Installed runtime and development requirements'
+	@echo 'Done: Installed/upgraded development packages'
 
-$(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/pip_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt setup.py $(package_py_files)
+$(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints.txt minimum-constraints-develop.txt setup.py $(package_py_files)
 	rm -fv $@
-	@echo 'Installing $(package_name) (editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	@echo 'Installing $(package_name) in edit mode with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
 	$(PIP_CMD) install -e .
 	which zhmc_log_forwarder
 	zhmc_log_forwarder --version
 	touch $@
-	@echo 'Done: Installed $(package_name)'
+	@echo 'Done: Installed $(package_name) in edit mode'
 
 $(doc_build_dir)/html/docs/index.html: Makefile $(doc_dependent_files)
 	rm -fv $@
@@ -353,7 +354,7 @@ $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(
 	echo "done" >$@
 
 .PHONY: check_reqs
-check_reqs: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done minimum-constraints.txt requirements.txt
+check_reqs: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints.txt minimum-constraints-develop.txt
 ifeq ($(python_m_version),2)
 	@echo "Makefile: Warning: Skipping the checking of missing dependencies on Python $(python_version)" >&2
 else
@@ -366,7 +367,7 @@ ifeq ($(PLATFORM),Windows_native)
 	@echo "Makefile: Warning: Skipping the checking of missing dependencies of site-packages directory on native Windows" >&2
 else
 	@echo "Makefile: Checking missing dependencies of some development packages in our minimum versions"
-	@rc=0; for pkg in $(check_reqs_packages); do dir=$$($(PYTHON_CMD) -c "import $${pkg} as m,os; dm=os.path.dirname(m.__file__); d=dm if not dm.endswith('site-packages') else m.__file__; print(d)"); cmd="pip-missing-reqs $${dir} --requirements-file=minimum-constraints.txt"; echo $${cmd}; $${cmd}; rc=$$(expr $${rc} + $${?}); done; exit $${rc}
+	@rc=0; for pkg in $(check_reqs_packages); do dir=$$($(PYTHON_CMD) -c "import $${pkg} as m,os; dm=os.path.dirname(m.__file__); d=dm if not dm.endswith('site-packages') else m.__file__; print(d)"); cmd="pip-missing-reqs $${dir} --requirements-file=minimum-constraints-develop.txt"; echo $${cmd}; $${cmd}; rc=$$(expr $${rc} + $${?}); done; exit $${rc}
 	@echo "Makefile: Done checking missing dependencies of some development packages in our minimum versions"
 endif
 endif

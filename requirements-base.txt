@@ -1,0 +1,14 @@
+# ------------------------------------------------------------------------------
+# Pip requirements file for base packages for a Python env.
+#
+# Note: Base packages are those needed for setting up an initial environment,
+# mainly to bring pip to a defined level.
+
+
+# ------------------------------------------------------------------------------
+# Base packages.
+# Must be consistent with minimum-constraints-develop.txt.
+
+pip>=23.3
+setuptools>=66.1.0
+wheel>=0.38.1
