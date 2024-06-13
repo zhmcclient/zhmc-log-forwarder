@@ -4,14 +4,14 @@
 
 This project supports its released versions as follows:
 
-- The [latest released version on Pypi](https://pypi.org/project/zhmcclient/)
+- The [latest released version on Pypi](https://pypi.org/project/zhmc-log-forwarder/)
   gets fixes, including security fixes.
 - Earlier versions are not fixed anymore.
 
 ## Reporting a Vulnerability
 
 Please report vulnerabilities via the
-[Security Advisories](https://github.com/zhmcclient/python-zhmcclient/security/advisories)
+[Security Advisories](https://github.com/zhmcclient/zhmc-log-forwarder/security/advisories)
 page of this project. This ensures that they are passed on to the maintainers
 privately.
 
