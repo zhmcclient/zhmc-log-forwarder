@@ -1,7 +1,7 @@
 # Config file for Python "coverage" package.
 #
 # For documentation, see:
-# http://coverage.readthedocs.org/en/latest/config.html
+# https://coverage.readthedocs.org/en/latest/config.html
 
 [run]
 
