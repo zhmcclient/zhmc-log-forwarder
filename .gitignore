@@ -10,6 +10,8 @@
 /dist/
 /AUTHORS
 /ChangeLog
+/MANIFEST.in
+/MANIFEST
 /.pytest_cache/
 /try/
 /.config/
