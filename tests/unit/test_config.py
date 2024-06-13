@@ -29,11 +29,14 @@ TESTCASES_CONFIG_LOAD = [
 hmc_host: 10.11.12.13
 hmc_user: user1
 hmc_password: pw1
+stomp_retry_timeout_config: {}
 """,
         {
             "hmc_host": "10.11.12.13",
             "hmc_user": "user1",
             "hmc_password": "pw1",
+            "hmc_verify_cert": True,
+            "stomp_retry_timeout_config": {},
             # Default items:
             'check_data': {'functional_users': [], 'imgmt_subnet': None},
             'forwardings': [],
