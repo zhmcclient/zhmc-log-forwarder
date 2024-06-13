@@ -1,5 +1,9 @@
 ---
-# Example config file
+# Config file for the zhmc_log_forwarder command, in YAML format.
+
+# This is an example config file with all supported config parameters and their
+# descriptions. You need to edit the file for setting at least the hmc_*
+# and syslog_* parameters.
 
 # IP address or hostname of the HMC.
 hmc_host: 10.11.12.13
@@ -9,6 +13,23 @@ hmc_user: myuser
 
 # HMC password.
 hmc_password: mypassword
+
+# HMC certificte validation (true, false, path to PEM file)
+hmc_verify_cert: false
+
+# STOMP retry/timeout configuration.
+# null means to use the zhmcclient defaults.
+stomp_retry_timeout_config: {}
+#   connect_timeout: null
+#   connect_retries: null
+#   reconnect_sleep_initial: null
+#   reconnect_sleep_increase: null
+#   reconnect_sleep_max: null
+#   reconnect_sleep_jitter: null
+#   keepalive: null
+#   heartbeat_send_cycle: null
+#   heartbeat_receive_cycle: null
+#   heartbeat_receive_check: null
 
 # Label for the HMC to be used in the log message (as field 'label').
 label: myregion-myzone-myhmc
@@ -39,6 +60,15 @@ selflog_format: '%(levelname)s: %(message)s'
 # datetime.strftime() format string.
 # Invoke with --help-time-format for details.
 selflog_time_format: '%Y-%m-%d %H:%M:%S.%f%z'
+
+# File path of HMC log message file (in YAML format) to be used with the
+# cadf output format. Relative file paths are relative to the directory
+# containing this config file. Default is null, which causes the file
+# provided with the zhmc_log_forwarder package to be used.
+log_message_file: null
+
+# Check data to be included in the generated CADF log records.
+check_data: {}
 
 # List of log forwardings. A log forwarding mainly defines a set of logs to
 # collect, and a destination to forward them to.
