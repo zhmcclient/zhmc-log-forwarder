@@ -5,7 +5,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+#    https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -101,8 +101,8 @@ class ConnectionError(Error):
 
 # JSON schema describing the structure of config files
 CONFIG_FILE_SCHEMA = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "http://example.com/root.json",
+    "$schema": "https://json-schema.org/draft-07/schema#",
+    "$id": "https://example.com/root.json",
     "definitions": {},
     "type": "object",
     "title": "zhmc_log_forwarder config file",
@@ -544,8 +544,8 @@ CONFIG_FILE_SCHEMA = {
 
 # JSON schema describing the structure of HMC log message files
 LOG_MESSAGE_FILE_SCHEMA = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "http://example.com/root.json",
+    "$schema": "https://json-schema.org/draft-07/schema#",
+    "$id": "https://example.com/root.json",
     "definitions": {},
     "type": "object",
     "title": "zhmc_log_forwarder HMC log message file",
@@ -1231,7 +1231,7 @@ actual record that is sent, it will be all on a single line:
 Nov 25 18:06:37 wdc04-05.HMC1
 {
     "id": "zhmc_log_forwarder:e3c43ae3-037b-4b64-9721-3242ea94c9e7",
-    "typeURI": "http://schemas.dmtf.org/cloud/audit/1.0/event",
+    "typeURI": "https://schemas.dmtf.org/cloud/audit/1.0/event",
     "eventTime": "2019-11-25T19:06:37+0100",
     "eventType": "activity",
     "action": "authenticate/logon",
@@ -1679,7 +1679,7 @@ class OutputHandler(object):
             msg_id = str(uuid.uuid4())
             out_dict = OrderedDict([
                 ("id", "zhmc_log_forwarder:{}".format(msg_id)),
-                ("typeURI", "http://schemas.dmtf.org/cloud/audit/1.0/event"),
+                ("typeURI", "https://schemas.dmtf.org/cloud/audit/1.0/event"),
                 ("eventTime", formatted_time(row.time, 'iso8601')),
                 ("eventType", "activity"),
                 ("action", msg_info.action),

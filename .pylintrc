@@ -124,7 +124,7 @@ evaluation=max(0, 0 if fatal else 10.0 - ((float(5 * error + warning + refactor 
 
 # Template used to display messages. This is a python new-style format string
 # used to format the message information. See doc for all details.
-# Note: Doc is at http://docs.pylint.org/output.html#reports-section
+# Note: Doc is at https://docs.pylint.org/output.html#reports-section
 # Note: This format only affects output format text, but not html.
 # Note: The default format is:
 #       {C}:{line:3d},{column:2d}: {msg} ({symbol})
@@ -170,7 +170,7 @@ confidence=
 #       interface uses wildcard imports and we cannot change that without
 #       breaking compatibility. We could move the message control statements
 #       into the source code, though.
-# Note: messages are described here: http://pylint-messages.wikidot.com/all-messages
+# Note: messages are described here: https://pylint-messages.wikidot.com/all-messages
 disable=I0011,
         too-many-locals, too-many-branches, too-many-statements,
         too-many-lines, too-many-public-methods,
