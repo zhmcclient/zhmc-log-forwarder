@@ -15,7 +15,6 @@
 # pip>=21.0 is needed for the cryptography package on Windows on GitHub Actions.
 pip>=23.3
 
-setuptools>=65.5.1; python_version <= '3.11'
-setuptools>=66.1.0; python_version >= '3.12'
+setuptools>=66.1.0
 
 wheel>=0.38.1
