@@ -17,7 +17,6 @@
 A log forwarder for the IBM Z HMC.
 """
 
-from __future__ import print_function
 import sys
 import os
 import argparse
@@ -685,15 +684,14 @@ def extend_with_default(validator_class):
                 instance.setdefault(prop, subschema["default"])
 
         # pylint: disable=use-yield-from
-        for error in validate_properties(
-                validator, properties, instance, schema):
-            yield error
+        yield from validate_properties(
+                validator, properties, instance, schema)
 
     return jsonschema.validators.extend(
         validator_class, {"properties": set_defaults})
 
 
-class Config(object):
+class Config:
     """
     The configuration parameters.
     """
@@ -712,7 +710,7 @@ class Config(object):
     def __repr__(self):
         parms = dict(self._parms)
         parms['hmc_password'] = BLANKED_SECRET
-        return 'Config({!r})'.format(parms)
+        return f'Config({parms!r})'
 
     @property
     def parms(self):
@@ -737,9 +735,9 @@ class Config(object):
         # Load config file
         try:
             # pylint: disable=unspecified-encoding
-            with open(filepath, 'r') as fp:
+            with open(filepath) as fp:
                 self._parms = yaml.safe_load(fp)
-        except IOError as exc:
+        except OSError as exc:
             raise UserError(
                 "Cannot load config file {}: {}".
                 format(filepath, exc))
@@ -756,7 +754,7 @@ class Config(object):
             for p in exc.absolute_path:
                 # Path contains list index numbers as integers
                 if isinstance(p, int):
-                    parm_str += '[{}]'.format(p)
+                    parm_str += f'[{p}]'
                 else:
                     if parm_str != '':
                         parm_str += '.'
@@ -774,7 +772,7 @@ class Config(object):
                     val_value=exc.validator_value))
 
 
-class LogMessage(object):
+class LogMessage:
     # pylint: disable=too-few-public-methods
     """
     An HMC log message with sufficient data to allow producing the
@@ -834,7 +832,7 @@ class LogMessageConfig(dict):
 
     def __repr__(self):
         data = dict(self._data)
-        return 'LogMessageConfig({!r})'.format(data)
+        return f'LogMessageConfig({data!r})'
 
     @property
     def messages(self):
@@ -858,9 +856,9 @@ class LogMessageConfig(dict):
         # Load HMC log message file
         try:
             # pylint: disable=unspecified-encoding
-            with open(filepath, 'r') as fp:
+            with open(filepath) as fp:
                 self._data = yaml.safe_load(fp)
-        except IOError as exc:
+        except OSError as exc:
             raise UserError(
                 "Cannot load HMC log message file {}: {}".
                 format(filepath, exc))
@@ -877,7 +875,7 @@ class LogMessageConfig(dict):
             for p in exc.absolute_path:
                 # Path contains list index numbers as integers
                 if isinstance(p, int):
-                    item_str += '[{}]'.format(p)
+                    item_str += f'[{p}]'
                 else:
                     if item_str != '':
                         item_str += '.'
@@ -1345,7 +1343,7 @@ def parse_args():
         "the HMC Audit log can be sent to a QRadar syslog server, and "
         "both the HMC Audit log and Security log can be sent to a logDNA "
         "syslog server.",
-        usage="{} [options]".format(CMD_NAME),
+        usage=f"{CMD_NAME} [options]",
         epilog=None)
 
     general_opts = parser.add_argument_group('General options')
@@ -1379,7 +1377,7 @@ def parse_args():
         help="Show help about the time field formatting and exit.")
     general_opts.add_argument(
         '--version',
-        action='version', version='{} {}'.format(CMD_NAME, __version__),
+        action='version', version=f'{CMD_NAME} {__version__}',
         help="Show the version number of this program and exit.")
     general_opts.add_argument(
         '--debug',
@@ -1398,7 +1396,7 @@ def parse_args():
 
 
 @attr.attrs
-class LogEntry(object):
+class LogEntry:
     # pylint: disable=too-few-public-methods
     """
     Definition of the data maintained for a log entry. This data is independent
@@ -1431,7 +1429,7 @@ def formatted_time(dt, time_format):
     return dt.strftime(time_format)  # already checked in __init__()
 
 
-class OutputHandler(object):
+class OutputHandler:
     """
     Handle the outputting of log records for a single log forwarding.
     """
@@ -1678,7 +1676,7 @@ class OutputHandler(object):
                 return None
             msg_id = str(uuid.uuid4())
             out_dict = OrderedDict([
-                ("id", "zhmc_log_forwarder:{}".format(msg_id)),
+                ("id", f"zhmc_log_forwarder:{msg_id}"),
                 ("typeURI", "https://schemas.dmtf.org/cloud/audit/1.0/event"),
                 ("eventTime", formatted_time(row.time, 'iso8601')),
                 ("eventType", "activity"),
@@ -1687,7 +1685,7 @@ class OutputHandler(object):
                 ("x_eventType", "zhmc" + row.id),
                 ("outcome", msg_info.outcome),
                 ("observer", OrderedDict([
-                    ("id", "hmc:{id}".format(id=console.uri)),
+                    ("id", f"hmc:{console.uri}"),
                     ("typeURI", "service"),
                     ("name", console.name),
                     ("x_label", row.label),
@@ -1703,7 +1701,7 @@ class OutputHandler(object):
             ])
             if row.user_name or CADF_ALWAYS_INCLUDE_OPTIONAL_ITEMS:
                 initiator = OrderedDict([
-                    ("id", "hmc:{id}".format(id=row.user_id)),
+                    ("id", f"hmc:{row.user_id}"),
                     ("typeURI", "data/security/account/user"),
                     ("name", row.user_name),
                 ])
@@ -1723,7 +1721,7 @@ class OutputHandler(object):
                 out_dict["initiator"] = initiator
             if msg_info.target_type or CADF_ALWAYS_INCLUDE_OPTIONAL_ITEMS:
                 if msg_info.target_class == 'console':
-                    resource_id = "hmc:{id}".format(id=console.uri)
+                    resource_id = f"hmc:{console.uri}"
                     resource_name = console.name
                 else:
                     # TODO: Change id to use object-id of HMC target resource
@@ -1778,7 +1776,7 @@ class DatetimeFormatter(logging.Formatter):
         return s
 
 
-class SelfLogger(object):
+class SelfLogger:
     """
     Python logger for self-logging.
 
@@ -2046,7 +2044,7 @@ def main():
             since_str = 'all'
         elif since == 'now':
             begin_time = datetime.now(dateutil_tz.tzlocal())
-            since_str = 'now ({})'.format(begin_time)
+            since_str = f'now ({begin_time})'
         else:
             assert since is not None
             try:
@@ -2056,7 +2054,7 @@ def main():
                 if begin_time.tzinfo is None:
                     begin_time = begin_time.replace(
                         tzinfo=dateutil_tz.tzlocal())
-                since_str = '{}'.format(begin_time)
+                since_str = f'{begin_time}'
             except (ValueError, OverflowError):
                 raise UserError(
                     "Config parameter 'since' has an invalid date & time "
@@ -2064,9 +2062,9 @@ def main():
                     format(args.since))
 
         self_logger.info(
-            "{} starting".format(CMD_NAME))
+            f"{CMD_NAME} starting")
         self_logger.info(
-            "{} version: {}".format(CMD_NAME, __version__))
+            f"{CMD_NAME} version: {__version__}")
         self_logger.info(
             "Config file: {file}".
             format(file=args.config_file))
@@ -2155,7 +2153,7 @@ def main():
         sys.exit(1)
 
     self_logger.info(
-        "{} stopped".format(CMD_NAME))
+        f"{CMD_NAME} stopped")
 
 
 if __name__ == '__main__':
