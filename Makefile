@@ -183,6 +183,7 @@ help:
 	@echo '  build      - Build the distribution files in: $(dist_dir)'
 	@echo '               Builds: $(bdist_file) $(sdist_file)'
 	@echo '  builddoc   - Build documentation in: $(doc_build_dir)'
+	@echo '  authors    - Generate AUTHORS.md file from git log'
 	@echo '  all        - Do all of the above'
 	@echo '  uninstall  - Uninstall package from active Python environment'
 	@echo '  upload     - Upload the distribution files to PyPI (includes uninstall+build)'
@@ -226,7 +227,7 @@ builddoc: $(doc_build_dir)/html/docs/index.html
 	@echo '$@ done.'
 
 .PHONY: all
-all: install develop check_reqs check test build builddoc
+all: install develop check_reqs check test build builddoc authors
 	@echo '$@ done.'
 
 .PHONY: upload
@@ -269,6 +270,16 @@ pyshow:
 	$(PYTHON_CMD) --version
 	which $(PIP_CMD)
 	$(PIP_CMD) --version
+	@echo '$@ done.'
+
+.PHONY: authors
+authors: _check_version
+	echo "# Authors of this project" >AUTHORS.md
+	echo "" >>AUTHORS.md
+	echo "Sorted list of authors derived from git commit history:" >>AUTHORS.md
+	echo '```' >>AUTHORS.md
+	git shortlog --summary --email | cut -f 2 | sort >>AUTHORS.md
+	echo '```' >>AUTHORS.md
 	@echo '$@ done.'
 
 .PHONY: _check_version
