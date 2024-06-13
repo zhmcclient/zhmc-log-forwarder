@@ -6,6 +6,13 @@
 # Direct dependencies for development.
 # Must be consistent with minimum-constraints-develop.txt.
 
+# Builder for the distribution archives (no imports, invoked via build script):
+build>=0.5.0
+# build requires virtualenv.cli_run which was added in virtualenv 20.1
+# virtualenv 20.16.0 removed support for Python<3.6
+virtualenv>=20.15.0; python_version <= '3.11'
+virtualenv>=20.23.0; python_version >= '3.12'
+
 # Tests (imports into testcases):
 pytest>=3.0.5 # MIT
 # mock>=2.0.0 # BSD
