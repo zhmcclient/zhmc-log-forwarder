@@ -55,6 +55,9 @@ clutter up your system Python.
     $ zhmc_log_forwarder --help-config-file
     ```
 
+    Additionally, an example config file is here:
+    [example_config_file.yml](https://github.com/zhmcclient/zhmc-log-forwarder/blob/master/example_config_file.yml)
+
     Redirect that output into a file and edit that file as needed.
 
 3.  Optional: The zhmc_log_forwarder package includes a default HMC log
