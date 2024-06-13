@@ -684,8 +684,7 @@ def extend_with_default(validator_class):
                 instance.setdefault(prop, subschema["default"])
 
         # pylint: disable=use-yield-from
-        yield from validate_properties(
-                validator, properties, instance, schema)
+        yield from validate_properties(validator, properties, instance, schema)
 
     return jsonschema.validators.extend(
         validator_class, {"properties": set_defaults})
@@ -911,6 +910,7 @@ class LogMessageConfig(dict):
 
 
 class HelpConfigFileAction(argparse.Action):
+    # pylint: disable=too-few-public-methods
     """
     Argparse class providing help text for --help-config-file.
     """
@@ -1057,6 +1057,7 @@ forwardings:
 
 
 class HelpLogMessageFileAction(argparse.Action):
+    # pylint: disable=too-few-public-methods
     """
     Argparse class providing help text for --help-log-message-file.
     """
@@ -1112,6 +1113,7 @@ messages:
 
 
 class HelpFormatAction(argparse.Action):
+    # pylint: disable=too-few-public-methods
     """
     Argparse class providing help text for --help-format.
     """
@@ -1132,6 +1134,7 @@ the 'format' parameter in the config file, using these choices:
 
 
 class HelpFormatLineAction(argparse.Action):
+    # pylint: disable=too-few-public-methods
     """
     Argparse class providing help text for --help-format-line.
     """
@@ -1191,6 +1194,7 @@ Example:
 
 
 class HelpFormatCADFAction(argparse.Action):
+    # pylint: disable=too-few-public-methods
     """
     Argparse class providing help text for --help-format-cadf.
     """
@@ -1284,6 +1288,7 @@ Nov 25 18:06:37 wdc04-05.HMC1
 
 
 class HelpTimeFormatAction(argparse.Action):
+    # pylint: disable=too-few-public-methods
     """
     Argparse class providing help text for --help-time-format.
     """
