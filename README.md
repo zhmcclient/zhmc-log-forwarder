@@ -1,11 +1,10 @@
 # A log forwarder for the IBM Z HMC
 
 [![Version on Pypi](https://img.shields.io/pypi/v/zhmc-log-forwarder.svg)](https://pypi.python.org/pypi/zhmc-log-forwarder/)
-<!---
 [![Test status (master)](https://github.com/zhmcclient/zhmc-log-forwarder/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/zhmcclient/zhmc-log-forwarder/actions/workflows/test.yml?query=branch%3Amaster)
-[![Docs status (master)](https://readthedocs.org/projects/zhmc-log-forwarder/badge/?version=latest)](https://readthedocs.org/projects/zhmc-log-forwarder/builds/)
 [![Test coverage (master)](https://coveralls.io/repos/github/zhmcclient/zhmc-log-forwarder/badge.svg?branch=master)](https://coveralls.io/github/zhmcclient/zhmc-log-forwarder?branch=master)
-[![CodeClimate status](https://codeclimate.com/github/zhmcclient/zhmc-log-forwarder/badges/gpa.svg)](https://codeclimate.com/github/zhmcclient/zhmc-log-forwarder)
+<!---
+[![Docs status (master)](https://readthedocs.org/projects/zhmc-log-forwarder/badge/?version=latest)](https://readthedocs.org/projects/zhmc-log-forwarder/builds/)
 --->
 
 # Overview
