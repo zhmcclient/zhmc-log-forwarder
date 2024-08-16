@@ -196,7 +196,7 @@ help:
 	@echo 'Package version will be: $(package_version)'
 	@echo 'Uses the currently active Python environment with Python $(python_version)'
 	@echo 'Valid targets are (they do just what is stated, i.e. no automatic prereq targets):'
-	@echo '  install    - Install package in active Python environment'
+	@echo '  install    - Install package in active Python environment (non-editable)'
 	@echo '  develop    - Prepare the development environment by installing prerequisites'
 	@echo "  check_reqs - Perform missing dependency checks"
 	@echo '  check      - Run Flake8 on sources'
@@ -336,13 +336,13 @@ $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PA
 
 $(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints.txt minimum-constraints-develop.txt setup.py $(package_py_files)
 	-$(call RM_FUNC,$@)
-	@echo 'Installing $(package_name) in edit mode with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
+	@echo 'Installing $(package_name) (non-editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
-	$(PIP_CMD) install -e .
+	$(PIP_CMD) install .
 	which zhmc_log_forwarder
 	zhmc_log_forwarder --version
 	touch $@
-	@echo 'Done: Installed $(package_name) in edit mode'
+	@echo 'Done: Installed $(package_name)'
 
 $(doc_build_dir)/html/docs/index.html: Makefile $(doc_dependent_files)
 	@echo "Makefile: Creating the HTML pages with top level file: $@"
