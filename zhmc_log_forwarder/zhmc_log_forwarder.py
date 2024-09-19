@@ -405,10 +405,6 @@ CONFIG_FILE_SCHEMA = {
                         "forwarding. Allowable values for the list items:"
                         " - 'security': HMC Security Log."
                         " - 'audit': HMC Audit Log.",
-                        "default": [
-                            "security",
-                            "audit"
-                        ],
                         "items": {
                             "$id": "#/properties/forwardings/items/"
                             "properties/logs/items",
@@ -745,7 +741,7 @@ class Config:
         ValidatorWithDefaults = extend_with_default(jsonschema.Draft7Validator)
         validator = ValidatorWithDefaults(self._schema)
 
-        # Validate structure of loaded config parms
+        # Validate structure of loaded config parms and add defaults from schema
         try:
             validator.validate(self._parms)
         except jsonschema.exceptions.ValidationError as exc:
@@ -2009,6 +2005,7 @@ def main():
         args = parse_args()
 
         config = Config()
+        # Sets missing config file parameters to their schema defaults
         config.load_config_file(args.config_file)
 
         # Final self-logger, using configuration parameters.
