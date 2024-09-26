@@ -183,11 +183,14 @@ safety_develop_policy_file := .safety-policy-develop.yml
 # Flake8 config file
 flake8_rc_file := .flake8
 
+# Ruff config file
+ruff_rc_file := .ruff.toml
+
 # PyLint config file
 pylint_rc_file := .pylintrc
 
 # Packages whose dependencies are checked using pip-missing-reqs
-check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 pylint safety twine towncrier
+check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 ruff pylint safety twine towncrier
 
 ifdef TESTCASES
 pytest_opts := $(TESTOPTS) -k $(TESTCASES)
@@ -208,6 +211,7 @@ help:
 	@echo '  develop    - Prepare the development environment by installing prerequisites'
 	@echo "  check_reqs - Perform missing dependency checks"
 	@echo '  check      - Run Flake8 on sources'
+	@echo "  ruff       - Run ruff on sources (an alternate lint tool)"
 	@echo '  pylint     - Run PyLint on sources'
 	@echo "  safety     - Run Safety tool"
 	@echo '  test       - Run tests (and test coverage)'
@@ -241,6 +245,10 @@ install: $(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done
 
 .PHONY: check
 check: $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done
+	@echo '$@ done.'
+
+.PHONY: ruff
+ruff: $(done_dir)/ruff_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
 
 .PHONY: pylint
@@ -378,6 +386,13 @@ $(done_dir)/flake8_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(
 	-$(call RM_FUNC,$@)
 	flake8 $(check_py_files)
 	echo "done" >$@
+
+$(done_dir)/ruff_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done $(ruff_rc_file) $(check_py_files)
+	@echo "Makefile: Performing ruff checks with PACKAGE_LEVEL=$(PACKAGE_LEVEL)"
+	-$(call RM_FUNC,$@)
+	ruff check --unsafe-fixes --config $(ruff_rc_file) $(check_py_files)
+	echo "done" >$@
+	@echo "Makefile: Done performing ruff checks"
 
 $(done_dir)/safety_develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(safety_develop_policy_file) minimum-constraints-develop.txt
 	@echo "Makefile: Running Safety for development packages (and tolerate safety issues when RUN_TYPE is normal or scheduled)"
