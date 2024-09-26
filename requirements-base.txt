@@ -1,20 +1,15 @@
 # ------------------------------------------------------------------------------
 # Pip requirements file for base packages for a Python env.
 #
-# Note: Base packages are those needed for setting up an initial environment,
-# mainly to bring pip to a defined level.
+# Base packages are those needed for pip and automatic package version detection.
 
 
 # ------------------------------------------------------------------------------
 # Base packages.
-# Must be consistent with minimum-constraints-develop.txt.
+# Base dependencies (must be consistent with minimum-constraints-install.txt
+# and build-system.requires in pyproject.toml)
 
-# pip 10.0.0 introduced the --exclude-editable option.
-# pip 18.0 is needed on pypy3 (py36) to support constraints like cffi!=1.11.3,>=1.8.
-# Pip 20.2 introduced a new resolver whose backtracking had issues that were resolved only in 21.2.2.
-# pip>=21.0 is needed for the cryptography package on Windows on GitHub Actions.
 pip>=23.3
-
 setuptools>=70.0.0
-
+setuptools-scm[toml]>=8.1.0
 wheel>=0.38.1
