@@ -180,6 +180,9 @@ pytest_no_log_opt := $(shell py.test --help 2>/dev/null |grep '\--no-print-logs'
 safety_install_policy_file := .safety-policy-install.yml
 safety_develop_policy_file := .safety-policy-develop.yml
 
+# Bandit config file
+bandit_rc_file := .bandit.toml
+
 # Flake8 config file
 flake8_rc_file := .flake8
 
@@ -190,7 +193,7 @@ ruff_rc_file := .ruff.toml
 pylint_rc_file := .pylintrc
 
 # Packages whose dependencies are checked using pip-missing-reqs
-check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 ruff pylint safety twine towncrier
+check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 ruff pylint safety bandit twine towncrier
 
 ifdef TESTCASES
 pytest_opts := $(TESTOPTS) -k $(TESTCASES)
@@ -214,6 +217,7 @@ help:
 	@echo "  ruff       - Run ruff on sources (an alternate lint tool)"
 	@echo '  pylint     - Run PyLint on sources'
 	@echo "  safety     - Run Safety tool"
+	@echo "  bandit     - Run bandit checker"
 	@echo '  test       - Run tests (and test coverage)'
 	@echo '               Does not include install but depends on it, so make sure install is current.'
 	@echo '               Env.var TESTCASES can be used to specify a py.test expression for its -k option'
@@ -258,6 +262,10 @@ pylint: $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done
 .PHONY: safety
 safety: $(done_dir)/safety_develop_$(pymn)_$(PACKAGE_LEVEL).done $(done_dir)/safety_install_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
+
+.PHONY: bandit
+bandit: $(done_dir)/bandit_$(pymn)_$(PACKAGE_LEVEL).done
+	@echo "Makefile: $@ done."
 
 .PHONY: build
 build: $(bdist_file) $(sdist_file)
@@ -407,6 +415,13 @@ $(done_dir)/safety_install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(
 	bash -c "safety check --policy-file $(safety_install_policy_file) -r minimum-constraints-install.txt --full-report || test '$(RUN_TYPE)' == 'normal' || exit 1"
 	echo "done" >$@
 	@echo "Makefile: Done running Safety for install packages"
+
+$(done_dir)/bandit_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done $(bandit_rc_file) $(check_py_files)
+	@echo "Makefile: Running Bandit"
+	-$(call RM_FUNC,$@)
+	bandit -c $(bandit_rc_file) -l $(check_py_files)
+	echo "done" >$@
+	@echo "Makefile: Done running Bandit"
 
 .PHONY: check_reqs
 check_reqs: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints-install.txt minimum-constraints-develop.txt

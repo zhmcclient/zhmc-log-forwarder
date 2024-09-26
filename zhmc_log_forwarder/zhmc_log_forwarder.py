@@ -44,7 +44,7 @@ from .version import __version__
 
 CMD_NAME = 'zhmc_log_forwarder'
 PACKAGE_NAME = 'zhmc-log-forwarder'
-BLANKED_SECRET = '********'
+BLANKED_SECRET = '********'  # nosec B105
 
 DEST_LOGGER_NAME = CMD_NAME + '_dest'
 SELF_LOGGER_NAME = CMD_NAME
