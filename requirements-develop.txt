@@ -95,6 +95,10 @@ typer-cli>=0.12.0
 typer-slim>=0.12.0
 psutil>=6.0.0
 
+# Bandit checker
+bandit>=1.7.8
+# PyYAML is used by bandit and is covered in requirements.txt
+
 # Twine (no imports, invoked via twine script):
 twine>=3.0.0
 # readme-renderer 23.0 has made cmarkgfm part of extras (it fails on Cygwin)
