@@ -94,9 +94,12 @@ package_name_under := zhmc_log_forwarder
 # Name of top level Python namespace
 module_name := zhmc_log_forwarder
 
-# Package version (full version, including any pre-release suffixes, e.g. "0.1.0.dev1")
-# Note: The package version is defined in zhmc_log_forwarder/version.py.
-package_version := $(shell $(PYTHON_CMD) setup.py --version)
+# Package version (e.g. "1.0.0a1.dev10+gd013028e" during development, or "1.0.0"
+# when releasing).
+# Note: The package version is automatically calculated by setuptools_scm based
+# on the most recent tag in the commit history, increasing the least significant
+# version indicator by 1.
+package_version := $(shell $(PYTHON_CMD) -m setuptools_scm)
 
 # Python versions
 python_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}.{}.{}'.format(*sys.version_info[0:3]))")
@@ -104,35 +107,16 @@ python_mn_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}.
 python_m_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}'.format(sys.version_info[0]))")
 pymn := py$(python_mn_version)
 
-# Directory for the generated distribution files
-dist_dir := dist
+package_dir := $(package_name_under)
 
-# Distribution archives (as built by 'build' tool)
-bdist_file := $(dist_dir)/$(package_name_under)-$(package_version)-py2.py3-none-any.whl
-sdist_file := $(dist_dir)/$(package_name_under)-$(package_version).tar.gz
-
-dist_files := $(bdist_file) $(sdist_file)
+# The version file is recreated by setuptools-scm on every build, so it is
+# excluded from git, and also from some dependency lists.
+version_file := $(package_dir)/_version_scm.py
 
 # Source files in the package
 package_py_files := \
-    $(wildcard $(module_name)/*.py) \
-    $(wildcard $(module_name)/*/*.py) \
-
-# Directory for generated API documentation
-doc_build_dir := build_doc
-
-# Directory where Sphinx conf.py is located
-doc_conf_dir := docs
-
-# Documentation generator command
-doc_cmd := sphinx-build
-doc_opts := -v -d $(doc_build_dir)/doctrees -c $(doc_conf_dir) .
-
-# Dependents for Sphinx documentation build
-doc_dependent_files := \
-    $(doc_conf_dir)/conf.py \
-    $(wildcard $(doc_conf_dir)/*.rst) \
-    $(package_py_files) \
+    $(filter-out $(version_file), $(wildcard $(package_dir)/*.py)) \
+    $(wildcard $(package_dir)/*/*.py) \
 
 # Directory with test source files
 test_dir := tests
@@ -142,6 +126,50 @@ test_py_files := \
     $(wildcard $(test_dir)/*.py) \
     $(wildcard $(test_dir)/*/*.py) \
     $(wildcard $(test_dir)/*/*/*.py) \
+
+# Directory for the generated distribution files
+dist_dir := dist
+
+# Distribution archives (as built by 'build' tool)
+bdist_file := $(dist_dir)/$(package_name_under)-$(package_version)-py3-none-any.whl
+sdist_file := $(dist_dir)/$(package_name_under)-$(package_version).tar.gz
+
+# Dependencies of the distribution archives. Since the $(version_file) is
+# created when building the distribution archives, this must not contain
+# the $(version_file).
+dist_dependent_files := \
+    pyproject.toml \
+    LICENSE \
+    README.md \
+    AUTHORS.md \
+    requirements.txt \
+    $(wildcard $(package_dir)/zhmc_log_messages.yml) \
+    $(package_py_files) \
+
+# Directory where docs files and conf.py are located
+doc_dir := docs
+
+# Directory for generated API documentation
+doc_build_dir := build_docs
+doc_build_file := $(doc_build_dir)/html/docs/index.html
+
+# Dependents for Sphinx documentation build
+doc_dependent_files := \
+    $(doc_dir)/conf.py \
+    $(wildcard $(doc_dir)/*.rst) \
+    $(package_py_files) \
+    $(version_file) \
+
+# Source files for checks (with PyLint and Flake8, etc.)
+check_py_files := \
+    $(package_py_files) \
+    $(test_py_files) \
+# TODO: Add conf.py once docs are created
+#    $(doc_dir)/conf.py \
+
+# Documentation generator command
+doc_cmd := sphinx-build
+doc_opts := -v -d $(doc_build_dir)/doctrees -c $(doc_dir) .
 
 # Directory for .done files
 done_dir := done
@@ -159,12 +187,6 @@ flake8_rc_file := .flake8
 # PyLint config file
 pylint_rc_file := .pylintrc
 
-# Source files for check (with PyLint and Flake8)
-check_py_files := \
-    setup.py \
-    $(package_py_files) \
-    $(test_py_files) \
-
 # Packages whose dependencies are checked using pip-missing-reqs
 check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 pylint safety twine
 
@@ -173,19 +195,6 @@ pytest_opts := $(TESTOPTS) -k $(TESTCASES)
 else
 pytest_opts := $(TESTOPTS)
 endif
-
-# Files to be built
-build_files := $(bdist_file) $(sdist_file)
-
-# Files the distribution archive depends upon.
-# This is also used for 'include' statements in MANIFEST.in.
-# Wildcards can be used directly (i.e. without wildcard function).
-dist_included_files := \
-    setup.py \
-    LICENSE \
-    README.md \
-    requirements.txt \
-    $(package_py_files) \
 
 # No built-in rules needed:
 .SUFFIXES:
@@ -244,11 +253,11 @@ safety: $(done_dir)/safety_develop_$(pymn)_$(PACKAGE_LEVEL).done $(done_dir)/saf
 	@echo '$@ done.'
 
 .PHONY: build
-build: $(build_files)
+build: $(bdist_file) $(sdist_file)
 	@echo '$@ done.'
 
 .PHONY: builddoc
-builddoc: $(doc_build_dir)/html/docs/index.html
+builddoc: $(doc_build_file)
 	@echo '$@ done.'
 
 .PHONY: all
@@ -256,12 +265,12 @@ all: install develop check_reqs check test build builddoc authors
 	@echo '$@ done.'
 
 .PHONY: upload
-upload: _check_version uninstall $(dist_files)
+upload: _check_version uninstall $(bdist_file) $(sdist_file)
 ifeq (,$(findstring .dev,$(package_version)))
 	@echo '==> This will upload $(package_name) version $(package_version) to PyPI!'
 	@echo -n '==> Continue? [yN] '
 	@bash -c 'read answer; if [ "$$answer" != "y" ]; then echo "Aborted."; false; fi'
-	twine upload $(dist_files)
+	twine upload $(bdist_file) $(sdist_file)
 	@echo 'Done: Uploaded $(package_name) version to PyPI: $(package_version)'
 	@echo '$@ done.'
 else
@@ -320,61 +329,44 @@ ifeq (,$(package_version))
 	$(error Package version could not be determined)
 endif
 
-$(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done: requirements-base.txt minimum-constraints-install.txt minimum-constraints-develop.txt
+$(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done: Makefile requirements-base.txt minimum-constraints-install.txt minimum-constraints-develop.txt
 	-$(call RM_FUNC,$@)
 	@echo 'Installing/upgrading base packages with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PYTHON_CMD) -m pip install $(pip_level_opts) -r requirements-base.txt
 	touch $@
 	@echo 'Done: Installed/upgraded base packages'
 
-$(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements-develop.txt minimum-constraints-install.txt minimum-constraints-develop.txt
+$(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done Makefile requirements-develop.txt minimum-constraints-install.txt minimum-constraints-develop.txt
 	-$(call RM_FUNC,$@)
 	@echo 'Installing/upgrading development packages with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
 	$(PIP_CMD) install $(pip_level_opts) -r requirements-develop.txt
 	touch $@
 	@echo 'Done: Installed/upgraded development packages'
 
-$(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done requirements.txt minimum-constraints-install.txt minimum-constraints-develop.txt setup.py $(package_py_files)
+$(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PACKAGE_LEVEL).done Makefile requirements.txt minimum-constraints-install.txt minimum-constraints-develop.txt pyproject.toml $(dist_dependent_files)
 	-$(call RM_FUNC,$@)
 	@echo 'Installing $(package_name) (non-editable) with PACKAGE_LEVEL=$(PACKAGE_LEVEL)'
-	$(PIP_CMD) install $(pip_level_opts) -r requirements.txt
-	$(PIP_CMD) install .
+	$(PIP_CMD) install $(pip_level_opts) .
 	which zhmc_log_forwarder
 	zhmc_log_forwarder --version
 	touch $@
 	@echo 'Done: Installed $(package_name)'
 
-$(doc_build_dir)/html/docs/index.html: Makefile $(doc_dependent_files)
+$(doc_build_file): $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(doc_dependent_files)
 	@echo "Makefile: Creating the HTML pages with top level file: $@"
 	-$(call RM_FUNC,$@)
 	$(doc_cmd) -b html $(doc_opts) $(doc_build_dir)/html
 	@echo "Done: Created the HTML pages with top level file: $@"
 
-# Note: distutils depends on the right files specified in MANIFEST.in, even when
-# they are already specified e.g. in 'package_data' in setup.py.
-# We generate the MANIFEST.in file automatically, to have a single point of
-# control (this Makefile) for what gets into the distribution archive.
-MANIFEST.in: Makefile $(dist_included_files)
-	@echo "Makefile: Creating the manifest input file"
-	echo "# MANIFEST.in file generated by Makefile - DO NOT EDIT!!" >$@
-ifeq ($(PLATFORM),Windows_native)
-	for %%f in ($(dist_included_files)) do (echo include %%f >>$@)
-else
-	echo "$(dist_included_files)" | xargs -n 1 echo include >>$@
-endif
-	@echo "Makefile: Done creating the manifest input file: $@"
+$(sdist_file): $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(dist_dependent_files)
+	@echo "Makefile: Building the source distribution archive: $(sdist_file)"
+	$(PYTHON_CMD) -m build --sdist --outdir $(dist_dir) .
+	@echo "Makefile: Done building the source distribution archive: $(sdist_file)"
 
-# Distribution archives.
-# Note: Deleting MANIFEST causes distutils (setup.py) to read MANIFEST.in and to
-# regenerate MANIFEST. Otherwise, changes in MANIFEST.in will not be used.
-# Note: Deleting build is a safeguard against picking up partial build products
-# which can lead to incorrect hashbangs in scripts in wheel archives.
-$(bdist_file) $(sdist_file): Makefile MANIFEST.in $(dist_included_files)
-	@echo 'Makefile: Creating distribution archives: $@'
-	-$(call RM_FUNC,MANIFEST)
-	-$(call RMDIR_FUNC,$(package_name).egg-info .eggs build)
-	$(PYTHON_CMD) -m build --outdir $(dist_dir)
-	@echo 'Makefile: Done creating distribution archives: $@'
+$(bdist_file) $(version_file): $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(dist_dependent_files)
+	@echo "Makefile: Building the wheel distribution archive: $(bdist_file)"
+	$(PYTHON_CMD) -m build --wheel --outdir $(dist_dir) -C--universal .
+	@echo "Makefile: Done building the wheel distribution archive: $(bdist_file)"
 
 $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(pylint_rc_file) $(check_py_files)
 	@echo "Makefile: Running Pylint"

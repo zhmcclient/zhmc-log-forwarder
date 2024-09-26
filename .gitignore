@@ -7,7 +7,9 @@
 /htmlcov/
 /build/
 /build_doc/
+/build_docs/
 /dist/
+/zhmc_log_forwarder/_version_scm.py
 /AUTHORS
 /ChangeLog
 /MANIFEST.in
