@@ -932,7 +932,7 @@ hmc_user: myuser
 # HMC password.
 hmc_password: mypassword
 
-# HMC certificte validation:
+# HMC certificate validation:
 # - true (default): CA certificates in the Python 'certifi' package.
 # - false: Disable CA certificate validation.
 # - str: Path to CA PEM file or CA directory (with c_rehash links).

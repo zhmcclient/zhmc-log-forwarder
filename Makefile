@@ -151,7 +151,7 @@ doc_dir := docs
 
 # Directory for generated API documentation
 doc_build_dir := build_docs
-doc_build_file := $(doc_build_dir)/html/docs/index.html
+doc_build_file := $(doc_build_dir)/index.html
 
 # Dependents for Sphinx documentation build
 doc_dependent_files := \
@@ -164,12 +164,11 @@ doc_dependent_files := \
 check_py_files := \
     $(package_py_files) \
     $(test_py_files) \
-# TODO: Add conf.py once docs are created
-#    $(doc_dir)/conf.py \
+    $(doc_dir)/conf.py \
 
 # Documentation generator command
 doc_cmd := sphinx-build
-doc_opts := -v -d $(doc_build_dir)/doctrees -c $(doc_dir) .
+doc_opts := -v -c $(doc_dir)
 
 # Directory for .done files
 done_dir := done
@@ -188,7 +187,7 @@ flake8_rc_file := .flake8
 pylint_rc_file := .pylintrc
 
 # Packages whose dependencies are checked using pip-missing-reqs
-check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 pylint safety twine
+check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 pylint safety twine towncrier
 
 ifdef TESTCASES
 pytest_opts := $(TESTOPTS) -k $(TESTCASES)
@@ -355,7 +354,7 @@ $(done_dir)/install_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/base_$(pymn)_$(PA
 $(doc_build_file): $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(doc_dependent_files)
 	@echo "Makefile: Creating the HTML pages with top level file: $@"
 	-$(call RM_FUNC,$@)
-	$(doc_cmd) -b html $(doc_opts) $(doc_build_dir)/html
+	$(doc_cmd) -b html $(doc_opts) $(doc_dir) $(doc_build_dir)
 	@echo "Done: Created the HTML pages with top level file: $@"
 
 $(sdist_file): $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(dist_dependent_files)
