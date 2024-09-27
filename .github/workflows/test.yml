@@ -153,12 +153,12 @@ jobs:
         RUN_TYPE: ${{ steps.set-run-type.outputs.result }}
       run: |
         make build
-    # - name: Run builddoc
-    #   env:
-    #     PACKAGE_LEVEL: ${{ matrix.package_level }}
-    #     RUN_TYPE: ${{ steps.set-run-type.outputs.result }}
-    #   run: |
-    #     make builddoc
+    - name: Run builddoc
+      env:
+        PACKAGE_LEVEL: ${{ matrix.package_level }}
+        RUN_TYPE: ${{ steps.set-run-type.outputs.result }}
+      run: |
+        make builddoc
     - name: Run check
       env:
         PACKAGE_LEVEL: ${{ matrix.package_level }}
