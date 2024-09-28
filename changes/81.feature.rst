@@ -1,0 +1,1 @@
+Added support for building a Docker container that runs the log forwarder.
