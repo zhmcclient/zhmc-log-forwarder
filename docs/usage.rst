@@ -31,6 +31,45 @@ With the virtual Python environment active, follow the steps in
 log forwarder.
 
 
+Running in a Docker container
+-----------------------------
+
+If you want to run the log forwarder in a Docker container you can create the
+container as follows, using the Dockerfile provided in the Git repository.
+
+* Clone the Git repository of the log forwarder and switch to the clone's root
+  directory:
+
+  .. code-block:: bash
+
+      $ git clone https://github.com/zhmcclient/zhmc-log-forwarder
+      $ cd zhmc-log-forwarder
+
+* Build a local Docker image as follows:
+
+  .. code-block:: bash
+
+      $ make docker
+
+  This builds a container image named 'zhmc_log_forwarder:latest' in your local
+  Docker environment.
+
+  The log forwarder config file is not included in the image, and needs to be
+  provided when running the image.
+
+* Run the local Docker image as follows:
+
+  .. code-block:: bash
+
+      $ docker run --rm -v $(pwd)/myconfig:/root/myconfig zhmc_log_forwarder -c /root/myconfig/config.yaml -v
+
+  In this command, the log forwarder config file is provided on the local system
+  as ``./myconfig/config.yaml``. The ``-v`` option of 'docker run' mounts the
+  ``./myconfig`` directory to ``/root/myconfig`` in the container's file system.
+  The ``-c`` option of the log forwarder references the config file as it
+  appears in the container's file system.
+
+
 Setting up the HMC
 ------------------
 

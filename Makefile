@@ -101,6 +101,10 @@ module_name := zhmc_log_forwarder
 # version indicator by 1.
 package_version := $(shell $(PYTHON_CMD) -m setuptools_scm)
 
+# Docker image
+docker_image_name := zhmc_log_forwarder
+docker_image_tag := latest
+
 # Python versions
 python_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}.{}.{}'.format(*sys.version_info[0:3]))")
 python_mn_version := $(shell $(PYTHON_CMD) -c "import sys; sys.stdout.write('{}.{}'.format(*sys.version_info[0:2]))")
@@ -230,6 +234,7 @@ help:
 	@echo "  release_publish - Publish to PyPI when releasing a version (requires VERSION and optionally BRANCH to be set)"
 	@echo "  start_branch - Create a start branch when starting a new version (requires VERSION and optionally BRANCH to be set)"
 	@echo "  start_tag - Create a start tag when starting a new version (requires VERSION and optionally BRANCH to be set)"
+	@echo "  docker     - Build local Docker image $(docker_image_name):$(docker_image_tag)"
 	@echo '  uninstall  - Uninstall package from active Python environment'
 	@echo '  clean      - Remove any temporary files'
 	@echo '  clobber    - Remove any build products (includes uninstall+clean)'
@@ -283,6 +288,10 @@ builddoc: $(doc_build_file)
 .PHONY: all
 all: install develop check_reqs check test build builddoc authors
 	@echo '$@ done.'
+
+.PHONY: docker
+docker: $(done_dir)/docker_$(pymn)_$(PACKAGE_LEVEL).done
+	@echo "Makefile: $@ done."
 
 .PHONY: release_branch
 release_branch:
@@ -396,6 +405,7 @@ clean:
 	-$(call RMDIR_R_FUNC,.eggs)
 	-$(call RM_FUNC,MANIFEST MANIFEST.in AUTHORS ChangeLog .coverage)
 	-$(call RM_R_FUNC,*.pyc *.tmp tmp_*)
+	docker image prune --force
 	@echo 'Done: Cleaned out all temporary files.'
 	@echo '$@ done.'
 
@@ -461,6 +471,15 @@ $(bdist_file) $(version_file): $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo "Makefile: Building the wheel distribution archive: $(bdist_file)"
 	$(PYTHON_CMD) -m build --wheel --outdir $(dist_dir) -C--universal .
 	@echo "Makefile: Done building the wheel distribution archive: $(bdist_file)"
+
+$(done_dir)/docker_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Dockerfile .dockerignore $(bdist_file)
+	@echo "Makefile: Building Docker image $(docker_image_name):$(docker_image_tag)"
+	-$(call RM_FUNC,$@)
+	docker build --tag $(docker_image_name):$(docker_image_tag) --build-arg bdist_file=$(bdist_file) --build-arg package_version=$(subst +,.,$(package_version)) --build-arg build_date="$(shell date -Iseconds)" --build-arg git_commit="$(shell git rev-parse HEAD)" .
+	docker run --rm $(docker_image_name):$(docker_image_tag) --version
+	docker image list --filter reference=$(docker_image_name)
+	@echo "Makefile: Done building Docker image"
+	echo "done" >$@
 
 $(done_dir)/pylint_$(pymn)_$(PACKAGE_LEVEL).done: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done Makefile $(pylint_rc_file) $(check_py_files)
 	@echo "Makefile: Running Pylint"
