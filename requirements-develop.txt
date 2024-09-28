@@ -99,13 +99,6 @@ psutil>=6.0.0
 bandit>=1.7.8
 # PyYAML is used by bandit and is covered in requirements.txt
 
-# Twine (no imports, invoked via twine script):
-twine>=3.0.0
-# readme-renderer 23.0 has made cmarkgfm part of extras (it fails on Cygwin)
-readme-renderer>=23.0
-# twine uses keyring, and keyring requires pywin32-ctypes!=0.1.0,0.1.1 but 0.2.0 is required on py38+
-pywin32-ctypes>=0.2.0; sys_platform=="win32"
-
 # Package dependency management tools (not used by any make rules)
 pipdeptree>=2.16.0
 # pip-check-reqs 2.3.2 is needed to have proper support for pip<21.3.
