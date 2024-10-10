@@ -23,6 +23,67 @@ Change log
 .. ============================================================================
 
 .. towncrier start
+Version 1.0.0
+^^^^^^^^^^^^^
+
+Released: 2024-10-10
+
+**Bug fixes:**
+
+* Addressed safety issues up to 2024-08-18.
+
+* Test: Fixed coveralls not found on MacOS with Python 3.9-3.11.
+
+* Test: Resolved new issues reported by Pylint 3.3.
+
+* Dev: Fixed checks and missing removal of temp file in make targets for releasing
+  and starting a version.
+
+* Dev: In the make commands to create/update AUTHORS.md, added a reftag to the
+  'git shortlog' command to fix the issue that without a terminal (e.g. in GitHub
+  Actions), the command did not display any authors.
+
+* Fixed incorrect check for start branch in 'make start_tag'. (`#88 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/88>`_)
+
+**Enhancements:**
+
+* Changed 'make install' to install in non-editable mode.
+
+* Dev: Relaxed the conditions when safety issues are tolerated.
+
+* Dev: The AUTHORS.md file is now updated when building the distribution
+  archives.
+
+* Migrated to pyproject.toml. (`#48 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/48>`_)
+
+* Added support for running the 'ruff' checker via "make ruff" and added that
+  to the test workflow. (`#58 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/58>`_)
+
+* Added support for running the 'bandit' checker with a new make target
+  'bandit', and added that to the GitHub Actions test workflow.
+  Adjusted the code in order to pass the bandit check. (`#59 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/59>`_)
+
+* Support for and test of Python 3.13.0-rc.1. Needed to increase the minimum
+  versions of PyYAML to 6.0.2. (`#62 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/62>`_)
+
+* Test: Added tests for Python 3.13 (final version). (`#63 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/63>`_)
+
+* Dev: Encapsulated the starting of a new version into new 'start_branch' and
+  'start_tag' make targets. See the development documentation for details. (`#70 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/70>`_)
+
+* Dev: Encapsulated the releasing of a version to PyPI into new 'release_branch'
+  and 'release_publish' make targets. See the development documentation for
+  details. (`#70 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/70>`_)
+
+* Added support for building a Docker container that runs the log forwarder. (`#81 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/81>`_)
+
+* Increased zhmcclient to 1.18.0 to pick up fixes. (`#85 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/85>`_)
+
+**Cleanup:**
+
+* Dev: Dropped the 'make upload' target, because the release to PyPI has
+  been migrated to using a publish workflow. (`#70 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/70>`_)
+
 
 Version 0.12.0
 ^^^^^^^^^^^^^^
