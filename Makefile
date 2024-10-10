@@ -249,6 +249,9 @@ help:
 	@echo "  VERSION=... - M.N.U version to be released or started"
 	@echo "  BRANCH=... - Name of branch to be released or started (default is derived from VERSION)"
 
+.PHONY: _always
+_always:
+
 .PHONY: develop
 develop: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done
 	@echo '$@ done.'
@@ -419,14 +422,19 @@ pyshow:
 	@echo '$@ done.'
 
 .PHONY: authors
-authors: _check_version
-	echo "# Authors of this project" >AUTHORS.md
-	echo "" >>AUTHORS.md
-	echo "Sorted list of authors derived from git commit history:" >>AUTHORS.md
-	echo '```' >>AUTHORS.md
-	git shortlog --summary --email | cut -f 2 | sort >>AUTHORS.md
-	echo '```' >>AUTHORS.md
-	@echo '$@ done.'
+authors: AUTHORS.md
+	@echo "$@ done."
+
+# Make sure the AUTHORS.md file is up to date but has the old date when it did
+# not change to prevent redoing dependent targets.
+AUTHORS.md: _always
+	echo "# Authors of this project" >AUTHORS.md.tmp
+	echo "" >>AUTHORS.md.tmp
+	echo "Sorted list of authors derived from git commit history:" >>AUTHORS.md.tmp
+	echo '```' >>AUTHORS.md.tmp
+	sh -c "git shortlog --summary --email HEAD | cut -f 2 | sort >>AUTHORS.md.tmp"
+	echo '```' >>AUTHORS.md.tmp
+	sh -c "if ! diff -q AUTHORS.md.tmp AUTHORS.md; then echo 'Updating AUTHORS.md as follows:'; diff AUTHORS.md.tmp AUTHORS.md; mv AUTHORS.md.tmp AUTHORS.md; else echo 'AUTHORS.md was already up to date'; rm AUTHORS.md.tmp; fi"
 
 .PHONY: _check_version
 _check_version:
