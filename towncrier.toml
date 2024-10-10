@@ -2,7 +2,7 @@
 
 [tool.towncrier]
 directory = "changes"
-package = "zhmc-log-forwarder"
+package = "zhmc_log_forwarder"
 # package_dir = "."
 filename = "docs/changes.rst"
 template = "changes/changes.rst.j2"
