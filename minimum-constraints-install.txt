@@ -54,7 +54,7 @@ pyrsistent==0.20.0
 pytz==2024.1
 six==1.16.0
 stomp.py==8.1.2
-typing_extensions==4.7.1
+typing-extensions==4.12.2
 websocket-client==1.8.0
 yamlloader==1.4.1
 zipp==3.19.1
