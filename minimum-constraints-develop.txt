@@ -12,7 +12,7 @@
 
 # Builder for the distribution archives (no imports, invoked via build script):
 build==1.0.0
-virtualenv==20.25.0
+virtualenv==20.26.6
 pyproject-hooks==1.1.0
 
 # Tests (imports into testcases):
