@@ -37,15 +37,18 @@ and the following formats:
 
 # Installation
 
-``` text
-$ pip install zhmc-log-forwarder
-```
+- If not yet available, install the "pipx" command as described in
+  https://pipx.pypa.io/stable/installation/.
 
-This will install the package and all of its prerequisite packages into
-your current Python environment.
+- Without having any virtual Python environment active, install the log
+  forwarder as follows:
 
-It is recommended to use a virtual Python environment, in order not to
-clutter up your system Python.
+  ``` bash
+  $ pipx install zhmc-log-forwarder
+  ```
+
+  That makes the `zhmc_log_forwarder` command available in the PATH, without
+  having to activate any virtual Python environment.
 
 # Quickstart
 
@@ -59,7 +62,7 @@ clutter up your system Python.
     An example config file with explanations of the parameters is shown
     when invoking:
 
-    ``` text
+    ``` bash
     $ zhmc_log_forwarder --help-config-file
     ```
 
