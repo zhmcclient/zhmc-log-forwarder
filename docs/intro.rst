@@ -56,11 +56,18 @@ Supported environments
 Quickstart
 ----------
 
-* Install the log forwarder and all of its Python dependencies as follows:
+* If not yet available, install the "pipx" command as described in
+  https://pipx.pypa.io/stable/installation/.
+
+* Without having any virtual Python environment active, install the log
+  forwarder as follows:
 
   .. code-block:: bash
 
-      $ pip install zhmc-log-forwarder
+      $ pipx install zhmc-log-forwarder
+
+  That makes the ``zhmc_log_forwarder`` command available in the PATH, without
+  having to activate any virtual Python environment.
 
 * Provide a *config file* for use by the log forwarder.
 
