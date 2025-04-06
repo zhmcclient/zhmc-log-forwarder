@@ -239,6 +239,8 @@ help:
 	@echo '  clean      - Remove any temporary files'
 	@echo '  clobber    - Remove any build products (includes uninstall+clean)'
 	@echo '  pyshow     - Show location and version of the python and pip commands'
+	@echo "  platform   - Display the information about the platform as seen by make"
+	@echo "  env        - Display the environment as seen by make"
 	@echo 'Environment variables:'
 	@echo '  PACKAGE_LEVEL="minimum" - Install minimum version of dependent Python packages'
 	@echo '  PACKAGE_LEVEL="latest" - Default: Install latest version of dependent Python packages'
@@ -251,6 +253,35 @@ help:
 
 .PHONY: _always
 _always:
+
+.PHONY: platform
+platform:
+ifeq ($(PLATFORM),Linux)
+	@echo "Makefile: Installing ld to get Linux distributions"
+	$(PYTHON_CMD) -m pip -q install ld
+endif
+	@echo "Makefile: Platform information as seen by make:"
+	@echo "Platform detected by Makefile: $(PLATFORM)"
+	@$(PYTHON_CMD) -c "import platform; print(f'Platform detected by Python: {platform.platform()}')"
+	@$(PYTHON_CMD) -c "import platform; print(f'HW platform detected by Python: {platform.machine()}')"
+ifeq ($(PLATFORM),Linux)
+	@$(PYTHON_CMD) -c "import ld; d=ld.linux_distribution(); print(f'Linux distro detected by ld: {d[0]} {d[1]}')"
+endif
+	@echo "Shell used for commands: $(SHELL)"
+	@echo "Shell flags: $(.SHELLFLAGS)"
+	@echo "Make version: $(MAKE_VERSION)"
+	@echo "Python command name: $(PYTHON_CMD)"
+	@echo "Python command location: $(shell $(WHICH) $(PYTHON_CMD))"
+	@echo "Python version: $(python_mn_version)"
+	@echo "Pip command name: $(PIP_CMD)"
+	@echo "Pip command location: $(shell $(WHICH) $(PIP_CMD))"
+	@echo "Pip version: $(shell $(PIP_CMD) --version)"
+	@echo "$(package_name) package version: $(package_version)"
+
+.PHONY: env
+env:
+	@echo "Makefile: Environment variables as seen by make:"
+	$(ENV)
 
 .PHONY: develop
 develop: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done
