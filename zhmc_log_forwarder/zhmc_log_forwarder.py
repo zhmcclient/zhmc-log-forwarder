@@ -1530,6 +1530,12 @@ class OutputHandler:
                 dest_stream.flush()
         else:
             assert dest == 'syslog'
+            self.syslog_host = self.fwd_parms['syslog_host']
+            self.syslog_port = self.fwd_parms['syslog_port']
+            self.syslog_facility = self.fwd_parms['syslog_facility']
+            assert self.syslog_facility in SysLogHandler.facility_names
+            facility_code = SysLogHandler.facility_names[self.syslog_facility]
+            self.syslog_porttype = self.fwd_parms['syslog_porttype']
             if self.syslog_porttype == 'tcp':
                 # Newer syslog protocols, e.g. rsyslog
                 socktype = socket.SOCK_STREAM
@@ -1539,7 +1545,7 @@ class OutputHandler:
                 socktype = socket.SOCK_DGRAM
             try:
                 handler = SysLogHandler(
-                    (self.syslog_host, self.syslog_port), self.syslog_facility,
+                    (self.syslog_host, self.syslog_port), facility_code,
                     socktype=socktype)
             except Exception as exc:
                 raise ConnectionError(
