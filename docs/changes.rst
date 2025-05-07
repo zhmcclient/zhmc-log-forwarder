@@ -23,6 +23,26 @@ Change log
 .. ============================================================================
 
 .. towncrier start
+Version 1.0.2
+^^^^^^^^^^^^^
+
+Released: 2025-05-07
+
+**Bug fixes:**
+
+* Fixed missing package dependencies for development.
+
+* Addressed safety issues up to 2025-02-26.
+
+* Fixed a regression in the Syslog support that resulted in an AssertionError.
+  The error had been introduced in PR 25 in version 0.12.0. (`#123 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/123>`_)
+
+**Enhancements:**
+
+* Dev: Started using the trusted publisher concept of Pypi in order to avoid
+  dealing with Pypi access tokens. (`#115 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/115>`_)
+
+
 Version 1.0.1
 ^^^^^^^^^^^^^
 
