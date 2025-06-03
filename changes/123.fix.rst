@@ -1,2 +1,0 @@
-Fixed a regression in the Syslog support that resulted in an AssertionError.
-The error had been introduced in PR 25 in version 0.12.0.

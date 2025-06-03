@@ -1,2 +1,0 @@
-Added support for logging the messages of the log forwarder itself as well
-as the HMC notifications to a log file.
