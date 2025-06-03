@@ -292,11 +292,11 @@ CONFIG_FILE_SCHEMA = {
             "type": "string",
             "title": "Destination for any self-log messages, as follows:"
             " - 'stdout': Standard output."
-            " - 'stderr': Standard error.",
-            "enum": ["stdout", "stderr"],
+            " - 'stderr': Standard error."
+            " - other string: Path name of log file.",
             "default": "stdout",
             "examples": [
-                "stdout", "stderr"
+                "stdout", "stderr", "myfile.log"
             ],
         },
         "selflog_format": {
@@ -967,6 +967,7 @@ future: true
 # Destination for any self-log entries:
 # - 'stdout': Standard output.
 # - 'stderr': Standard error.
+# - other string: Path name of log file to be appended to.
 selflog_dest: stdout
 
 # Format of any self-log entries, as a format string for Python
@@ -1790,7 +1791,10 @@ class SelfLogger:
     Self-logging is the logging of any actions and particularly of failures of
     this program itself. This is separate from forwarding the HMC log entries.
 
-    At this point, self-logging can be configured to go to stdout or stderr,
+    This also includes logging of the HMC interactions of the zhmcclient
+    library.
+
+    Self-logging can be configured to go to stdout or stderr or to a log file,
     and the log message format and time format for the log message can be
     configured.
     """
@@ -1800,7 +1804,8 @@ class SelfLogger:
         Parameters:
 
           dest (string): The name of the self-logging destination, as a string
-            ('stdout', 'stderr').
+            ('stdout', 'stderr', or the path name of a log file to be appended
+            to).
 
           format_str (string): The format string for self-logging, using Python
             logging.Formatter string format.
@@ -1816,26 +1821,37 @@ class SelfLogger:
         self._time_format = time_format
         self._debug = debug
 
+        self._dest_stream = None  # Lazy initialization
         self._logger = None  # Lazy initialization
 
     def _setup(self):
         """
-        Set up the logger, if not yet set up.
+        Set up the loggers, if not yet set up.
         """
         if self._logger is None:
-            formatter = DatetimeFormatter(
-                fmt=self._format, datefmt=self._time_format)
             if self._dest == 'stdout':
-                dest_stream = sys.stdout
+                self._dest_stream = sys.stdout
+            elif self._dest == 'stderr':
+                self._dest_stream = sys.stderr
             else:
-                assert self._dest == 'stderr'
-                dest_stream = sys.stderr
-            handler = StreamHandler(dest_stream)
-            handler.setFormatter(formatter)
-            self._logger = logging.getLogger(SELF_LOGGER_NAME)
-            self._logger.addHandler(handler)
-            log_level = logging.DEBUG if self._debug else logging.INFO
-            self._logger.setLevel(log_level)
+                # pylint: disable=consider-using-with
+                self._dest_stream = open(self._dest, 'a', encoding='utf-8')
+            self._logger = self._setup_logger(SELF_LOGGER_NAME)
+            self._setup_logger(zhmcclient.JMS_LOGGER_NAME)
+
+    def _setup_logger(self, logger_name):
+        """
+        Set up a single logger.
+        """
+        formatter = DatetimeFormatter(
+            fmt=self._format, datefmt=self._time_format)
+        handler = StreamHandler(self._dest_stream)
+        handler.setFormatter(formatter)
+        logger = logging.getLogger(logger_name)
+        logger.addHandler(handler)
+        log_level = logging.DEBUG if self._debug else logging.INFO
+        logger.setLevel(log_level)
+        return logger
 
     def debug(self, msg):
         """Log at debug level"""
@@ -1856,25 +1872,6 @@ class SelfLogger:
         """Log at error level"""
         self._setup()
         self._logger.error(msg)
-
-
-def zhmcclient_log_setup(logger_name, dest, format_str, time_format, debug):
-    """
-    Set up the zhmcclient loggers.
-    """
-    formatter = DatetimeFormatter(
-        fmt=format_str, datefmt=time_format)
-    if dest == 'stdout':
-        dest_stream = sys.stdout
-    else:
-        assert dest == 'stderr'
-        dest_stream = sys.stderr
-    handler = StreamHandler(dest_stream)
-    handler.setFormatter(formatter)
-    logger = logging.getLogger(logger_name)
-    logger.addHandler(handler)
-    log_level = logging.DEBUG if debug else logging.INFO
-    logger.setLevel(log_level)
 
 
 def get_log_entries(logs, console, begin_time, end_time):
@@ -2015,13 +2012,6 @@ def main():
             time_format=config.parms['selflog_time_format'],
             debug=args.debug)
 
-        zhmcclient_log_setup(
-            logger_name=zhmcclient.JMS_LOGGER_NAME,
-            dest=config.parms['selflog_dest'],
-            format_str=config.parms['selflog_format'],
-            time_format=config.parms['selflog_time_format'],
-            debug=args.debug)
-
         # self_logger.debug("Effective config with defaults: {!r}".
         #                   format(config))
 
@@ -2069,8 +2059,9 @@ def main():
                     "value: {}".
                     format(args.since))
 
+        start_time = datetime.now(dateutil_tz.tzlocal())
         self_logger.info(
-            f"{CMD_NAME} starting")
+            f"{CMD_NAME} starting at {start_time}")
         self_logger.info(
             f"{CMD_NAME} version: {__version__}")
         self_logger.info(
@@ -2160,8 +2151,9 @@ def main():
         self_logger.error(str(exc))
         sys.exit(1)
 
+    stop_time = datetime.now(dateutil_tz.tzlocal())
     self_logger.info(
-        f"{CMD_NAME} stopped")
+        f"{CMD_NAME} stopped at {stop_time}")
 
 
 if __name__ == '__main__':
