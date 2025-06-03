@@ -1,0 +1,1 @@
+Added timestamps to the start and stop messages of the log forwarder.
