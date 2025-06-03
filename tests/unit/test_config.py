@@ -44,6 +44,8 @@ stomp_retry_timeout_config: {}
             'label': None,
             'log_message_file': None,
             'selflog_dest': 'stdout',
+            'selflog_debug': False,
+            'selflog_jms': False,
             'selflog_format': '%(levelname)s: %(message)s',
             'selflog_time_format': '%Y-%m-%d %H:%M:%S.%f%z',
         },
