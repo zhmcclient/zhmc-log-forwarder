@@ -23,6 +23,49 @@ Change log
 .. ============================================================================
 
 .. towncrier start
+Version 1.1.0
+^^^^^^^^^^^^^
+
+Released: 2025-06-03
+
+**Bug fixes:**
+
+* Fixed missing package dependencies for development.
+
+* Addressed safety issues up to 2025-06-03.
+
+* Fixed a regression in the Syslog support that resulted in an AssertionError.
+  The error had been introduced in PR 25 in version 0.12.0. (`#123 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/123>`_)
+
+**Enhancements:**
+
+* Added check for incorrectly named towncrier change fragment files.
+
+* Added a new optional boolean config parameter 'selflog_debug' that when true
+  includes debug messages in self-log messages. By default, they are
+  not included.
+
+* Added a new optional boolean config parameter 'selflog_jms' that when true
+  includes HMC JMS notifications in self-log messages. By default, they are
+  not included.
+
+* Dev: Started using the trusted publisher concept of Pypi in order to avoid
+  dealing with Pypi access tokens. (`#115 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/115>`_)
+
+* Dev: Added display of environment variables and platform details in test
+  workflow. (`#116 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/116>`_)
+
+* Added timestamps to the start and stop messages of the log forwarder. (`#129 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/129>`_)
+
+* Added support for logging the messages of the log forwarder itself as well
+  as the HMC notifications to a log file. (`#129 <https://github.com/zhmcclient/zhmc-log-forwarder/issues/129>`_)
+
+**Cleanup:**
+
+* Accommodated rollout of Ubuntu 24.04 on GitHub Actions by using ubuntu-22.04
+  as the OS image for Python 3.8 based test runs.
+
+
 Version 1.0.0
 ^^^^^^^^^^^^^
 
