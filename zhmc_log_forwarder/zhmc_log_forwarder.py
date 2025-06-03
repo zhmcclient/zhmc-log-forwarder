@@ -299,6 +299,24 @@ CONFIG_FILE_SCHEMA = {
                 "stdout", "stderr", "myfile.log"
             ],
         },
+        "selflog_debug": {
+            "$id": "#/properties/selflog_debug",
+            "type": "boolean",
+            "title": "Include debug messages in self-log messages",
+            "default": False,
+            "examples": [
+                True, False
+            ]
+        },
+        "selflog_jms": {
+            "$id": "#/properties/selflog_jms",
+            "type": "boolean",
+            "title": "Include HMC JMS notifications in self-log messages",
+            "default": False,
+            "examples": [
+                True, False
+            ]
+        },
         "selflog_format": {
             "$id": "#/properties/selflog_format",
             "type": "string",
@@ -970,6 +988,12 @@ future: true
 # - other string: Path name of log file to be appended to.
 selflog_dest: stdout
 
+# Include debug messages in self-log messages:
+selflog_debug: false
+
+# Include HMC JMS notifications in self-log messages:
+selflog_jms: false
+
 # Format of any self-log entries, as a format string for Python
 # logging.Formatter objects.
 # See https://docs.python.org/2/library/logging.html#logrecord-attributes for
@@ -1381,10 +1405,6 @@ def parse_args():
         '--version',
         action='version', version=f'{CMD_NAME} {__version__}',
         help="Show the version number of this program and exit.")
-    general_opts.add_argument(
-        '--debug',
-        dest='debug', action='store_true',
-        help="Show debug self-logged messages (if any).")
 
     config_opts = parser.add_argument_group('Config options')
     config_opts.add_argument(
@@ -1799,7 +1819,7 @@ class SelfLogger:
     configured.
     """
 
-    def __init__(self, dest, format_str, time_format, debug):
+    def __init__(self, dest, format_str, time_format, debug=False, jms=False):
         """
         Parameters:
 
@@ -1815,11 +1835,14 @@ class SelfLogger:
 
           debug (bool): Show debug self-logged messages. This causes causes the
             log level to be increased from INFO to DEBUG.
+
+          jms (bool): Show HMC JMS notifications as self-logged messages.
         """
         self._dest = dest
         self._format = format_str
         self._time_format = time_format
         self._debug = debug
+        self._jms = jms
 
         self._dest_stream = None  # Lazy initialization
         self._logger = None  # Lazy initialization
@@ -1836,10 +1859,12 @@ class SelfLogger:
             else:
                 # pylint: disable=consider-using-with
                 self._dest_stream = open(self._dest, 'a', encoding='utf-8')
-            self._logger = self._setup_logger(SELF_LOGGER_NAME)
-            self._setup_logger(zhmcclient.JMS_LOGGER_NAME)
+            log_level = logging.DEBUG if self._debug else logging.INFO
+            self._logger = self._setup_logger(SELF_LOGGER_NAME, log_level)
+            if self._jms:
+                self._setup_logger(zhmcclient.JMS_LOGGER_NAME, logging.DEBUG)
 
-    def _setup_logger(self, logger_name):
+    def _setup_logger(self, logger_name, log_level):
         """
         Set up a single logger.
         """
@@ -1849,7 +1874,6 @@ class SelfLogger:
         handler.setFormatter(formatter)
         logger = logging.getLogger(logger_name)
         logger.addHandler(handler)
-        log_level = logging.DEBUG if self._debug else logging.INFO
         logger.setLevel(log_level)
         return logger
 
@@ -1994,8 +2018,7 @@ def main():
     self_logger = SelfLogger(
         dest=top_schema_props['selflog_dest']['default'],
         format_str=top_schema_props['selflog_format']['default'],
-        time_format=top_schema_props['selflog_time_format']['default'],
-        debug=False)
+        time_format=top_schema_props['selflog_time_format']['default'])
 
     try:  # transform any of our exceptions to an error exit
 
@@ -2010,10 +2033,10 @@ def main():
             dest=config.parms['selflog_dest'],
             format_str=config.parms['selflog_format'],
             time_format=config.parms['selflog_time_format'],
-            debug=args.debug)
+            debug=config.parms['selflog_debug'],
+            jms=config.parms['selflog_jms'])
 
-        # self_logger.debug("Effective config with defaults: {!r}".
-        #                   format(config))
+        self_logger.debug("Effective config: {!r}".format(config))
 
         stomp_rt_config = zhmcclient.StompRetryTimeoutConfig(
             **config.parms['stomp_retry_timeout_config'])
