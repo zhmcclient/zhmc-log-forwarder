@@ -176,8 +176,9 @@ jobs:
     # Note: This requires that in the branch protection rules for stable_*,
     #       the "Restrict pushes that create matching branches" checkmark is
     #       not set.
-    - name: Create new stable branch when releasing master branch
+    - name: "Create new stable branch ${{ steps.set-stable-branch.outputs.result }} when releasing master branch"
       if: steps.set-is-master-branch.outputs.result == 'true'
+      id: create-stable-branch
       uses: actions/github-script@v7
       with:
         script: |
@@ -189,3 +190,12 @@ jobs:
           })
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+    - name: Handle HTTP error 422 from creating the new stable branch
+      if: steps.set-is-master-branch.outputs.result == 'true' and steps.create-stable-branch.outputs.status == 422
+      run: |
+        echo "Error: Creating the new stable branch ${{ steps.set-stable-branch.outputs.result }} failed, but the publish still succeeded. Create the new stable branch manually:"
+        echo "git checkout master"
+        echo "git pull"
+        echo "git checkout -b ${{ steps.set-stable-branch.outputs.result }}"
+        echo "git push --set-upstream origin ${{ steps.set-stable-branch.outputs.result }}"
