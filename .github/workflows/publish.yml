@@ -173,10 +173,10 @@ jobs:
         INPUT_BODY: "Change log https://zhmc-log-forwarder.readthedocs.io/en/${{ steps.set-tag.outputs.result }}/changes.html"
 
     #-------- Creation of stable branch
-    # Note: This requires that in the branch protection rules for stable_*,
-    #       the "Restrict pushes that create matching branches" checkmark is
-    #       not set.
-    - name: "Create new stable branch ${{ steps.set-stable-branch.outputs.result }} when releasing master branch"
+    # Note: This does not seem to depend on the disablement of the "Restrict pushes
+    # that create matching branches" setting in the branch protection rules for stable_*.
+    # It is possible that this fails with HTTP 422, for unknown reasons.
+    - name: Create new stable branch when releasing master branch
       if: steps.set-is-master-branch.outputs.result == 'true'
       id: create-stable-branch
       uses: actions/github-script@v7
