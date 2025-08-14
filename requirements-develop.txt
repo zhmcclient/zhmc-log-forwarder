@@ -18,8 +18,10 @@ mock>=2.0.0
 requests-mock>=1.2.0
 testfixtures>=6.9.0
 yamlordereddictloader>=0.4.0
-# flake8 up to 6.0.0 has not yet adjusted to the removed interfaces of importlib-metadata 5.0
-importlib-metadata>=4.8.3,<5
+# For versions of importlib-metadata that are in Python, see https://pypi.org/project/importlib-metadata/
+# importlib-metadata 8.5.0 is the last version supporting Python 3.8
+importlib-metadata>=8.5.0; python_version == '3.8'
+importlib-metadata>=8.7.0; python_version >= '3.9'
 
 # Coverage reporting (no imports, invoked via coveralls script):
 # coveralls versions 4.0.0/4.0.1 have increased their pinning of coverage to <8,
