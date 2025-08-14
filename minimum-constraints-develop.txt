@@ -21,8 +21,8 @@ mock==2.0.0
 requests-mock==1.2.0
 testfixtures==6.9.0
 yamlordereddictloader==0.4.0
-# importlib-metadata is in Python>=3.8 (for versions, see https://pypi.org/project/importlib-metadata/)
-importlib-metadata==4.8.3
+importlib-metadata==8.5.0; python_version == '3.8'
+importlib-metadata==8.7.0; python_version >= '3.9'
 
 # Coverage reporting (no imports, invoked via coveralls script):
 coverage==5.0

@@ -60,4 +60,4 @@ stomp.py==8.1.2
 typing-extensions==4.12.2
 websocket-client==1.8.0
 yamlloader==1.4.1
-zipp==3.19.1
+zipp==3.20.0
