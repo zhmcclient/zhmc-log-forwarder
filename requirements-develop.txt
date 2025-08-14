@@ -19,7 +19,7 @@ requests-mock>=1.2.0
 testfixtures>=6.9.0
 yamlordereddictloader>=0.4.0
 # flake8 up to 6.0.0 has not yet adjusted to the removed interfaces of importlib-metadata 5.0
-importlib-metadata>=4.8.3,<5
+importlib-metadata>=8.7,<9
 
 # Coverage reporting (no imports, invoked via coveralls script):
 # coveralls pins coverage to <7.0, causing pip backtracking to happen. Pinning
