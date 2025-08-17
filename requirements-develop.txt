@@ -111,7 +111,7 @@ bandit>=1.7.8
 # PyYAML is used by bandit and is covered in requirements.txt
 
 # Package dependency management tools (not used by any make rules)
-pipdeptree>=2.16.0
+pipdeptree>=2.24.0
 # pip-check-reqs 2.3.2 is needed to have proper support for pip<21.3.
 # pip-check-reqs 2.4.0 requires Python>=3.8.
 # pip-check-reqs 2.4.3 fixes a speed issue on Python 3.11 and requires pip>=21.2.4
@@ -126,4 +126,4 @@ pip-check-reqs>=2.5.1; python_version >= '3.12'
 
 # packaging is used by pytest, pip-check-reqs, sphinx
 # packaging>=20.5 is needed by pip-check-reqs 2.4.3 but it requires only packaging>=16.0
-packaging>=21.0
+packaging>=24.1
