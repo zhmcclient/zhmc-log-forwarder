@@ -200,7 +200,7 @@ pylint_rc_file := .pylintrc
 check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 ruff pylint safety bandit towncrier
 
 ifdef TESTCASES
-pytest_opts := $(TESTOPTS) -k $(TESTCASES)
+pytest_opts := $(TESTOPTS) -k '$(TESTCASES)'
 else
 pytest_opts := $(TESTOPTS)
 endif
