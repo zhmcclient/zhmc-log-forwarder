@@ -51,7 +51,7 @@ shown with ``zhmc_log_forwarder --help-config-file``.
 
 You can also check the `YAML specification`_.
 
-.. _YAML specification: http://yaml.org/spec/1.2/spec.html
+.. _YAML specification: https://yaml.org/spec/1.2/spec.html
 
 YAML validation error in log forwarder config file
 --------------------------------------------------

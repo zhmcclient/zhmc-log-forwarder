@@ -19,6 +19,9 @@ Usage
 This section describes how to use the log forwarder beyond the quick introduction
 in :ref:`Quickstart`.
 
+.. _virtual Python environment: https://docs.python-guide.org/dev/virtualenvs/
+.. _Pypi: https://pypi.org/
+
 Installation using pipx
 -----------------------
 
