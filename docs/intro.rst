@@ -19,7 +19,7 @@ What this package provides
 --------------------------
 
 The zhmc-log-forwarder package provides a log forwarder for the
-`IBM Z <https://www.ibm.com/it-infrastructure/z>`_ Hardware Management Console
+`IBM Z <https://www.ibm.com/products/z?lnk=flatitem>`_ Hardware Management Console
 (HMC), written in pure Python.
 
 It contains a command named ``zhmc_log_forwarder`` that collects security
@@ -108,4 +108,4 @@ License
 
 This package is licensed under the `Apache 2.0 License`_.
 
-.. _Apache 2.0 License: http://apache.org/licenses/LICENSE-2.0
+.. _Apache 2.0 License: https://apache.org/licenses/LICENSE-2.0
