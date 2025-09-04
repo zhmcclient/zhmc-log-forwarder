@@ -167,7 +167,7 @@ jobs:
     #   run: |
     #     bash -c "! git diff --exit-code origin/${{ github.base_ref }} changes/*.rst >/dev/null || (echo 'Please add or modify a change fragment file in the changes directory - for details read the Making a change section in the docs'; exit 1)"
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     - name: Display environment
