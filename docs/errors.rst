@@ -18,7 +18,7 @@ Troubleshooting
 This section describes some issues and how to resolve them. If you encounter
 an issue that is not covered here, see :ref:`Reporting issues`.
 
-The `zhmcclient Troubleshooting <https://python-zhmcclient.readthedocs.io/en/latest/appendix.html#troubleshooting>`_
+The `zhmcclient Troubleshooting <https://python-zhmcclient.readthedocs.io/en/stable/appendix.html#troubleshooting>`_
 section also applies to the log forwarder.
 
 Permission error with log forwarder config file
