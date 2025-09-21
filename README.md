@@ -100,8 +100,8 @@ and the following formats:
 
 # Documentation and Change Log
 
-- [Documentation](http://zhmc-log-forwarder.readthedocs.io)
-- [Change log](http://zhmc-log-forwarder.readthedocs.io/en/master/changes.html)
+- [Documentation](http://zhmc-log-forwarder.readthedocs.io/en/stable/)
+- [Change log](http://zhmc-log-forwarder.readthedocs.io/en/stable/changes.html)
 
 # License
 

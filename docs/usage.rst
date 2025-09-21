@@ -300,7 +300,7 @@ chain (usually the last one displayed):
     $ openssl storeutl -noout -text -certs /tmp/get-server-certs.pem | grep -E "Certificate|Subject:|Issuer"
 
 For more information, see the
-`Security <https://python-zhmcclient.readthedocs.io/en/latest/security.html>`_
+`Security <https://python-zhmcclient.readthedocs.io/en/stable/security.html>`_
 section in the documentation of the 'zhmcclient' package.
 
 
@@ -482,7 +482,7 @@ Where:
 
 * ``stomp_retry_timeout_config`` - STOMP retry/timeout configuration.
   ``null`` means to use the zhmcclient defaults. For a description, see
-  https://python-zhmcclient.readthedocs.io/en/latest/notifications.html#zhmcclient.StompRetryTimeoutConfig
+  https://python-zhmcclient.readthedocs.io/en/stable/notifications.html#zhmcclient.StompRetryTimeoutConfig
 
 * ``selflog_dest`` - Destination for any self-log entries:
 
