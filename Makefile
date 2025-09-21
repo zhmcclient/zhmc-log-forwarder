@@ -161,6 +161,7 @@ doc_build_file := $(doc_build_dir)/index.html
 doc_dependent_files := \
     $(doc_dir)/conf.py \
     $(wildcard $(doc_dir)/*.rst) \
+    $(wildcard changes/*) \
     $(package_py_files) \
     $(version_file) \
 
