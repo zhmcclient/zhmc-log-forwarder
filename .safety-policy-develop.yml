@@ -60,6 +60,8 @@ security:
             reason: Fixed pip version 21.1 requires Python>=3.6 and is used there
         70612:
             reason: No fixed Jinja2 version
+        79756:
+            reason: Fixed authlib version 1.6.4 requires Python>=3.9 and is used there
 
     # Continue with exit code 0 when vulnerabilities are found.
     continue-on-vulnerability-error: False
