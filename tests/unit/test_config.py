@@ -34,7 +34,7 @@ stomp_retry_timeout_config: {}
         {
             "hmc_host": "10.11.12.13",
             "hmc_user": "user1",
-            "hmc_password": "pw1",
+            "hmc_password": "pw1",  # nosec: B105
             "hmc_verify_cert": True,
             "stomp_retry_timeout_config": {},
             # Default items:
