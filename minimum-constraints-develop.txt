@@ -106,7 +106,7 @@ pip-check-reqs==2.5.1; python_version >= '3.12'
 # Indirect dependencies for development that are needed for some reason.
 # Must be consistent with requirements-develop.txt.
 
-packaging==24.1
+packaging==24.2
 
 
 # ------------------------------------------------------------------------------

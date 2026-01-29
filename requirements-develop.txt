@@ -122,4 +122,4 @@ pip-check-reqs>=2.5.1; python_version >= '3.12'
 
 # packaging is used by pytest, pip-check-reqs, sphinx
 # packaging>=20.5 is needed by pip-check-reqs 2.4.3 but it requires only packaging>=16.0
-packaging>=24.1
+packaging>=24.2
