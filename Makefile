@@ -178,9 +178,6 @@ doc_opts := -v -c $(doc_dir)
 # Directory for .done files
 done_dir := done
 
-# Determine whether py.test has the --no-print-logs option.
-pytest_no_log_opt := $(shell py.test --help 2>/dev/null |grep '\--no-print-logs' >/dev/null; if [ $$? -eq 0 ]; then echo '--no-print-logs'; else echo ''; fi)
-
 # Safety policy files
 safety_install_policy_file := .safety-policy-install.yml
 safety_develop_policy_file := .safety-policy-develop.yml
@@ -200,10 +197,11 @@ pylint_rc_file := .pylintrc
 # Packages whose dependencies are checked using pip-missing-reqs
 check_reqs_packages := pip_check_reqs pipdeptree build pytest coverage coveralls flake8 ruff pylint safety bandit towncrier
 
+pytest_general_opts := -s --color=yes
 ifdef TESTCASES
-pytest_opts := $(TESTOPTS) -k '$(TESTCASES)'
+pytest_test_opts := $(TESTOPTS) -k '$(TESTCASES)'
 else
-pytest_opts := $(TESTOPTS)
+pytest_test_opts := $(TESTOPTS)
 endif
 
 # No built-in rules needed:
@@ -225,7 +223,6 @@ help:
 	@echo "  bandit     - Run bandit checker"
 	@echo "  test       - Run tests (and test coverage)"
 	@echo "               Does not include install but depends on it, so make sure install is current."
-	@echo "               Env.var TESTCASES can be used to specify a py.test expression for its -k option"
 	@echo "  build      - Build the distribution files in: $(dist_dir)"
 	@echo "               Builds: $(bdist_file) $(sdist_file)"
 	@echo "  builddoc   - Build documentation in: $(doc_build_dir)"
@@ -593,5 +590,5 @@ endif
 .PHONY: test
 test: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done $(package_py_files) $(test_py_files) .coveragerc
 	-$(call RM_FUNC,htmlcov)
-	pytest $(pytest_no_log_opt) -s $(test_dir) --cov $(module_name) --cov-config .coveragerc --cov-report=html $(pytest_opts)
+	bash -c "PYTHONPATH=. coverage run --append -m pytest $(pytest_general_opts) $(pytest_test_opts) $(test_dir)"
 	@echo "Makefile: $@ done."
