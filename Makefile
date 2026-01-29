@@ -591,4 +591,5 @@ endif
 test: $(done_dir)/develop_$(pymn)_$(PACKAGE_LEVEL).done $(package_py_files) $(test_py_files) .coveragerc
 	-$(call RM_FUNC,htmlcov)
 	bash -c "PYTHONPATH=. coverage run --append -m pytest $(pytest_general_opts) $(pytest_test_opts) $(test_dir)"
+	coverage html
 	@echo "Makefile: $@ done."
