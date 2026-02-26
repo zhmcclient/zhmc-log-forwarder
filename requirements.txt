@@ -10,7 +10,7 @@
 # Must be consistent with minimum-constraints-install.txt.
 
 # zhmcclient @ git+https://github.com/zhmcclient/python-zhmcclient.git@master
-zhmcclient>=1.18.2
+zhmcclient>=1.25.0
 
 attrs>=22.2.0
 PyYAML>=6.0.2
