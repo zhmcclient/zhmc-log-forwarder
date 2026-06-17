@@ -6,5 +6,7 @@ Andreas Maier <maiera@de.ibm.com>
 Anil Kumar Dakarapu <anil.kumar.dakarapu@ibm.com>
 Chaithra Vonteddu <vonteddu.chaithra1@ibm.com>
 Juergen Leopold <leopoldj@de.ibm.com>
+dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
+mend-bolt-for-github[bot] <42819689+mend-bolt-for-github[bot]@users.noreply.github.com>
 renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>
 ```
