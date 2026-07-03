@@ -14,6 +14,9 @@ setuptools==78.1.1
 setuptools-scm==9.2.0
 wheel==0.46.2
 
+# ld gets installed by 'make platform' on Linux
+ld==0.5.0; sys_platform=="linux"
+
 
 # ------------------------------------------------------------------------------
 # Direct dependencies for installation.
@@ -44,18 +47,20 @@ jsonschema==4.18.0
 
 certifi==2024.07.04
 charset-normalizer==2.0.0; python_version >= '3.10'
-decorator==4.0.11
 docopt==0.6.2
 # requests 2.31 requires idna>=2.5,<4
 # anyio 3.1.0 depends on idna>=2.8
 # idna>3 requires using requests >=2.26.0
 idna==3.15
-immutable-views==0.6.0
+immutabledict==4.3.1
+jsonschema-specifications==2025.9.1
 nocasedict==2.0.3
-pyrsistent==0.20.0
+packaging==24.2
+referencing==0.36.2
+rpds-py==0.27.1
 six==1.16.0
 stomp.py==8.1.2
+tomli==2.0.1; python_version <= '3.10'  # used by a number of packages; built-in to Python>=3.11
 typing-extensions==4.14.1
+vcs-versioning==1.1.1
 websocket-client==1.8.0
-yamlloader==1.4.1
-zipp==3.20.0
