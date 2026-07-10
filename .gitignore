@@ -37,3 +37,4 @@ cover
 *.eggs
 *egg-info
 .vagrant
+/extra_reqs*.txt
