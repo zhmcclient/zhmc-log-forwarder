@@ -1,5 +1,6 @@
-#!/usr/bin/env python
-"""Unit tests for zhmc_log_forwarder.Config class"""
+"""
+Unit tests for zhmc_log_forwarder.Config class
+"""
 
 import os
 import uuid
