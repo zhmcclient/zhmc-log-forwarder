@@ -23,7 +23,6 @@ import argparse
 from datetime import datetime
 import time
 from collections import OrderedDict
-import textwrap
 import logging
 from logging.handlers import SysLogHandler
 from logging import StreamHandler
@@ -60,19 +59,6 @@ DEBUG_CADF_INCLUDE_FULL_RECORD = False
 
 # Debug flag: Output only unknown HMC log messages in CADF output
 DEBUG_CADF_ONLY_UNKNOWN = False
-
-
-try:
-    textwrap.indent
-except AttributeError:  # undefined function (wasn't added until Python 3.3)
-    def indent(text, amount, pad_char=' '):
-        """Indent each line of text by amount"""
-        pad_str = amount * pad_char
-        return ''.join(pad_str + line for line in text.splitlines(True))
-else:
-    def indent(text, amount, pad_char=' '):
-        """Indent each line of text by amount"""
-        return textwrap.indent(text, amount * pad_char)
 
 
 class Error(Exception):
@@ -907,7 +893,7 @@ class LogMessageConfig(dict):
 
         # Set up the other attributes
 
-        self._messages = dict()
+        self._messages = {}
         messages = self._data['messages']
         for m in messages:
             number = m['number']
@@ -1794,7 +1780,7 @@ class DatetimeFormatter(logging.Formatter):
         time_value = record.created
         if time_value.is_integer():
             time_value += float(record.msecs) / 1000
-        dt = datetime.fromtimestamp(time_value)
+        dt = datetime.fromtimestamp(time_value)  # noqa: DTZ006
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=dateutil_tz.tzlocal())
         if datefmt:
@@ -1858,7 +1844,8 @@ class SelfLogger:
                 self._dest_stream = sys.stderr
             else:
                 # pylint: disable=consider-using-with
-                self._dest_stream = open(self._dest, 'a', encoding='utf-8')
+                self._dest_stream = open(  # noqa: SIM115
+                    self._dest, 'a', encoding='utf-8')
             log_level = logging.DEBUG if self._debug else logging.INFO
             self._logger = self._setup_logger(SELF_LOGGER_NAME, log_level)
             if self._jms:
