@@ -56,10 +56,12 @@ jsonschema-specifications==2025.9.1
 nocasedict==2.0.3
 packaging==26.2
 referencing==0.36.2
-rpds-py==0.27.1
+rpds-py==0.27.1; python_version <= '3.14'
+rpds-py==2026.9.1; python_version >= '3.15'
 six==1.16.0
 stomp.py==8.1.2
 tomli==2.0.1
-typing-extensions==4.14.1
+typing-extensions==4.14.1; python_version <= '3.14'
+typing-extensions==4.16.0; python_version >= '3.15'
 vcs-versioning==1.1.1
 websocket-client==1.8.0
